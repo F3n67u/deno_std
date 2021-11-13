@@ -32,6 +32,17 @@ export function isInt32(value: number): boolean {
   return value === (value | 0);
 }
 
+export const validateInteger = hideStackFrames(
+  (value, name, min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER) => {
+    if (typeof value !== 'number')
+      throw new ERR_INVALID_ARG_TYPE(name, 'number', value);
+    if (!Number.isInteger(value))
+      throw new ERR_OUT_OF_RANGE(name, 'an integer', value);
+    if (value < min || value > max)
+      throw new ERR_OUT_OF_RANGE(name, `>= ${min} && <= ${max}`, value);
+  }
+);
+
 export const validateInt32 = hideStackFrames(
   (value, name, min = -2147483648, max = 2147483647) => {
     // The defaults for min and max correspond to the limits of 32-bit integers.
@@ -81,6 +92,12 @@ export const validateOneOf = hideStackFrames(
     }
   },
 );
+
+export function validateBoolean(value: unknown, name: string) {
+  if (typeof value !== 'boolean')
+    throw new ERR_INVALID_ARG_TYPE(name, 'boolean', value);
+}
+
 
 // Check that the port number is not NaN when coerced to a number,
 // is an integer and that it falls within the legal range of port numbers.
