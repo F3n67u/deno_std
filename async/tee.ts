@@ -1,13 +1,23 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
-// Utility for representing n-tuple
-type Tuple<T, N extends number> = N extends N
+/**
+ * Utility for representing n-tuple. Used in {@linkcode tee}.
+ *
+ * @internal
+ */
+export type Tuple<T, N extends number> = N extends N
   ? number extends N ? T[] : TupleOf<T, N, []>
   : never;
-type TupleOf<T, N extends number, R extends unknown[]> = R["length"] extends N
-  ? R
-  : TupleOf<T, N, [T, ...R]>;
+
+/**
+ * Utility for representing n-tuple of. Used in {@linkcode Tuple}.
+ *
+ * @internal
+ */
+export type TupleOf<T, N extends number, R extends unknown[]> =
+  R["length"] extends N ? R
+    : TupleOf<T, N, [T, ...R]>;
 
 interface QueueNode<T> {
   value: T;
@@ -31,7 +41,7 @@ class Queue<T> {
     this.done = false;
   }
 
-  async next(): Promise<void> {
+  async next() {
     const result = await this.#source.next();
     if (!result.done) {
       const nextNode: QueueNode<T> = {
@@ -47,33 +57,33 @@ class Queue<T> {
 }
 
 /**
- * Branches the given async iterable into the n branches.
+ * Branches the given async iterable into the `n` branches.
  *
- * Example:
- *
+ * @example Usage
  * ```ts
- *     import { tee } from "./tee.ts";
+ * import { tee } from "@std/async/tee";
+ * import { assertEquals } from "@std/assert";
  *
- *     const gen = async function* gen() {
- *       yield 1;
- *       yield 2;
- *       yield 3;
- *     }
+ * const gen = async function* gen() {
+ *   yield 1;
+ *   yield 2;
+ *   yield 3;
+ * };
  *
- *     const [branch1, branch2] = tee(gen());
+ * const [branch1, branch2] = tee(gen());
  *
- *     (async () => {
- *       for await (const n of branch1) {
- *         console.log(n); // => 1, 2, 3
- *       }
- *     })();
+ * const result1 = await Array.fromAsync(branch1);
+ * assertEquals(result1, [1, 2, 3]);
  *
- *     (async () => {
- *       for await (const n of branch2) {
- *         console.log(n); // => 1, 2, 3
- *       }
- *     })();
+ * const result2 = await Array.fromAsync(branch2);
+ * assertEquals(result2, [1, 2, 3]);
  * ```
+ *
+ * @typeParam T The type of the provided async iterable and the returned async iterables.
+ * @typeParam N The amount of branches to tee into.
+ * @param iterable The iterable to tee.
+ * @param n The amount of branches to tee into.
+ * @returns The tuple where each element is an async iterable.
  */
 export function tee<T, N extends number = 2>(
   iterable: AsyncIterable<T>,
@@ -95,11 +105,10 @@ export function tee<T, N extends number = 2>(
     }
   }
 
-  const branches = Array.from({ length: n }).map(
+  return Array.from({ length: n }).map(
     () => generator(),
   ) as Tuple<
     AsyncIterable<T>,
     N
   >;
-  return branches;
 }

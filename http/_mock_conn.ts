@@ -1,4 +1,4 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 
 /** Create dummy `Deno.Conn` object with given base properties. */
 export function mockConn(base: Partial<Deno.Conn> = {}): Deno.Conn {
@@ -23,7 +23,7 @@ export function mockConn(base: Partial<Deno.Conn> = {}): Deno.Conn {
     write: (): Promise<number> => {
       return Promise.resolve(-1);
     },
-    close: (): void => {},
+    close: () => {},
     readable: new ReadableStream({
       type: "bytes",
       async pull(_controller) {
@@ -42,9 +42,9 @@ export function mockConn(base: Partial<Deno.Conn> = {}): Deno.Conn {
     }),
     // TODO(ry) Remove the following ts-ignore.
     // @ts-ignore This was added to workaround incompatibilities between Deno versions.
-    setNoDelay: (_nodelay?: boolean): void => {},
+    setNoDelay: (_nodelay?: boolean) => {},
     // @ts-ignore This was added to workaround incompatibilities between Deno versions.
-    setKeepAlive: (_keepalive?: boolean): void => {},
+    setKeepAlive: (_keepalive?: boolean) => {},
     ...base,
   };
 }

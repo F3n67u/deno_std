@@ -1,9 +1,10 @@
+// deno-lint-ignore-file no-console
 import { emptyDir } from "../empty_dir.ts";
 
-emptyDir(Deno.args[0])
-  .then(() => {
-    Deno.stdout.write(new TextEncoder().encode("success"));
-  })
-  .catch((err) => {
-    Deno.stdout.write(new TextEncoder().encode(err.message));
-  });
+try {
+  // Empty testfolder stored in Deno.args where the child.txt is located.
+  await emptyDir(Deno.args[0]!);
+  console.log("success");
+} catch (error) {
+  console.log(error);
+}

@@ -1,4 +1,4 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
@@ -23,11 +23,4 @@ export function filterInPlace<T>(
   array.splice(outputIndex);
 
   return array;
-}
-
-/**
- * Produces a random number between the inclusive `lower` and `upper` bounds.
- */
-export function randomInteger(lower: number, upper: number) {
-  return lower + Math.floor(Math.random() * (upper - lower + 1));
 }

@@ -1,40 +1,126 @@
 // Copyright 2014-2021 Sindre Sorhus. All rights reserved. MIT license.
 // Copyright 2021 Yoshiya Hinosawa. All rights reserved. MIT license.
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2021 Giuseppe Eletto. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
+
+/**
+ * Convert bytes to a human-readable string: 1337 → 1.34 kB
+ *
+ * Based on {@link https://github.com/sindresorhus/pretty-bytes | pretty-bytes}.
+ * A utility for displaying file sizes for humans.
+ *
+ * ```ts
+ * import { format } from "@std/fmt/bytes";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(format(1337), "1.34 kB");
+ * assertEquals(format(100), "100 B");
+ * ```
+ * @module
+ */
 
 type LocaleOptions = {
   minimumFractionDigits?: number;
   maximumFractionDigits?: number;
 };
 
-/**
- * The options for pretty printing the byte numbers.
- */
-export interface PrettyBytesOptions {
-  /** Uses bits representation. Default is false. */
+/** Options for {@linkcode format}. */
+export interface FormatOptions {
+  /**
+   * Uses bits representation.
+   *
+   * @default {false}
+   */
   bits?: boolean;
-  /** Uses binary bytes (e.g. kibibyte). Default is false. */
+  /**
+   * Uses binary bytes (e.g. kibibyte).
+   *
+   * @default {false}
+   */
   binary?: boolean;
-  /** Include plus sign for positive numbers. */
+  /**
+   * Include plus sign for positive numbers.
+   *
+   * @default {false}
+   */
   signed?: boolean;
-  /** Uses localized number formatting. If it is set to true, uses default locale on the system. If it's set to string, uses that locale. The given string should be BCP 47 language tag (ref: https://en.wikipedia.org/wiki/IETF_language_tag). You can also give the list of language tags. */
+  /**
+   * Uses localized number formatting. If it is set to true, uses default
+   * locale on the system. If it's set to string, uses that locale. The given
+   * string should be a
+   * {@link https://en.wikipedia.org/wiki/IETF_language_tag | BCP 47 language tag}.
+   * You can also give the list of language tags.
+   */
   locale?: boolean | string | string[];
-  /** The minimum number of fraction digits to display. If neither minimumFractionDigits or maximumFractionDigits are set, the default behavior is to round to 3 significant digits. */
+  /**
+   * The minimum number of fraction digits to display. If neither
+   * {@linkcode minimumFractionDigits} or {@linkcode maximumFractionDigits}
+   * are set.
+   *
+   * @default {3}
+   */
   minimumFractionDigits?: number;
-  /** The maximum number of fraction digits to display. If neither minimumFractionDigits or maximumFractionDigits are set, the default behavior is to round to 3 significant digits. */
+  /**
+   * The maximum number of fraction digits to display. If neither
+   * {@linkcode minimumFractionDigits} or {@linkcode maximumFractionDigits}
+   * are set.
+   *
+   * @default {3}
+   */
   maximumFractionDigits?: number;
 }
 
 /**
- * Convert bytes to a human readable string: 1337 → 1.34 kB
+ * Convert bytes to a human-readable string: 1337 → 1.34 kB
  *
- * @param num The number to format
- * @param options The options
+ * Based on {@link https://github.com/sindresorhus/pretty-bytes | pretty-bytes}.
+ * A utility for displaying file sizes for humans.
+ *
+ * @param num The bytes value to format
+ * @param options The options for formatting
+ * @returns The formatted string
+ *
+ * @example Basic usage
+ * ```ts
+ * import { format } from "@std/fmt/bytes";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(format(1337), "1.34 kB");
+ * assertEquals(format(100), "100 B");
+ * ```
+ *
+ * @example Include bits representation
+ *
+ * ```ts
+ * import { format } from "@std/fmt/bytes";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(format(1337, { bits: true }), "1.34 kbit");
+ * ```
+ *
+ * @example Include sign
+ *
+ * ```ts
+ * import { format } from "@std/fmt/bytes";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(format(42, { signed: true }), "+42 B");
+ * assertEquals(format(-42, { signed: true }), "-42 B");
+ * ```
+ *
+ * @example Change locale
+ *
+ * ```ts
+ * import { format } from "@std/fmt/bytes";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(format(1337, { locale: "de" }), "1,34 kB");
+ * ```
  */
-export function prettyBytes(
+export function format(
   num: number,
-  options: PrettyBytesOptions = {},
+  options: FormatOptions = {},
 ): string {
   if (!Number.isFinite(num)) {
     throw new TypeError(`Expected a finite number, got ${typeof num}: ${num}`);
@@ -84,14 +170,22 @@ export function prettyBytes(
 }
 
 function getLocaleOptions(
-  { maximumFractionDigits, minimumFractionDigits }: PrettyBytesOptions,
+  { maximumFractionDigits, minimumFractionDigits }: FormatOptions,
 ): LocaleOptions | undefined {
-  if (maximumFractionDigits || minimumFractionDigits) {
-    return {
-      maximumFractionDigits,
-      minimumFractionDigits,
-    };
+  if (
+    maximumFractionDigits === undefined && minimumFractionDigits === undefined
+  ) {
+    return;
   }
+
+  const ret: LocaleOptions = {};
+  if (maximumFractionDigits !== undefined) {
+    ret.maximumFractionDigits = maximumFractionDigits;
+  }
+  if (minimumFractionDigits !== undefined) {
+    ret.minimumFractionDigits = minimumFractionDigits;
+  }
+  return ret;
 }
 
 /**

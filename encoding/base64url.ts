@@ -1,18 +1,27 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
+
+/**
+ * Utilities for
+ * {@link https://www.rfc-editor.org/rfc/rfc4648.html#section-5 | base64url}
+ * encoding and decoding.
+ *
+ * @module
+ */
 
 import * as base64 from "./base64.ts";
 
-/*
+/**
  * Some variants allow or require omitting the padding '=' signs:
  * https://en.wikipedia.org/wiki/Base64#The_URL_applications
+ *
  * @param base64url
  */
-export function addPaddingToBase64url(base64url: string): string {
+function addPaddingToBase64url(base64url: string): string {
   if (base64url.length % 4 === 2) return base64url + "==";
   if (base64url.length % 4 === 3) return base64url + "=";
   if (base64url.length % 4 === 1) {
-    throw new TypeError("Illegal base64url string!");
+    throw new TypeError("Illegal base64url string");
   }
   return base64url;
 }
@@ -25,22 +34,55 @@ function convertBase64urlToBase64(b64url: string): string {
   return addPaddingToBase64url(b64url).replace(/\-/g, "+").replace(/_/g, "/");
 }
 
-function convertBase64ToBase64url(b64: string): string {
-  return b64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+function convertBase64ToBase64url(b64: string) {
+  return b64.endsWith("=")
+    ? b64.endsWith("==")
+      ? b64.replace(/\+/g, "-").replace(/\//g, "_").slice(0, -2)
+      : b64.replace(/\+/g, "-").replace(/\//g, "_").slice(0, -1)
+    : b64.replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 /**
- * Encodes a given ArrayBuffer or string into a base64url representation
- * @param data
+ * Convert data into a base64url-encoded string.
+ *
+ * @see {@link https://www.rfc-editor.org/rfc/rfc4648.html#section-5}
+ *
+ * @param data The data to encode.
+ * @returns The base64url-encoded string.
+ *
+ * @example Usage
+ * ```ts
+ * import { encodeBase64Url } from "@std/encoding/base64url";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(encodeBase64Url("foobar"), "Zm9vYmFy");
+ * ```
  */
-export function encode(data: ArrayBuffer | string): string {
-  return convertBase64ToBase64url(base64.encode(data));
+export function encodeBase64Url(
+  data: ArrayBuffer | Uint8Array | string,
+): string {
+  return convertBase64ToBase64url(base64.encodeBase64(data));
 }
 
 /**
- * Converts given base64url encoded data back to original
- * @param b64url
+ * Decodes a given base64url-encoded string.
+ *
+ * @see {@link https://www.rfc-editor.org/rfc/rfc4648.html#section-5}
+ *
+ * @param b64url The base64url-encoded string to decode.
+ * @returns The decoded data.
+ *
+ * @example Usage
+ * ```ts
+ * import { decodeBase64Url } from "@std/encoding/base64url";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(
+ *   decodeBase64Url("Zm9vYmFy"),
+ *   new TextEncoder().encode("foobar")
+ * );
+ * ```
  */
-export function decode(b64url: string): Uint8Array {
-  return base64.decode(convertBase64urlToBase64(b64url));
+export function decodeBase64Url(b64url: string): Uint8Array {
+  return base64.decodeBase64(convertBase64urlToBase64(b64url));
 }

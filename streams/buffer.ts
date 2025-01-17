@@ -1,11 +1,26 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import { assert } from "../_util/assert.ts";
-import { copy } from "../bytes/mod.ts";
+// Copyright 2018-2025 the Deno authors. MIT license.
+// This module is browser compatible.
+
+import { copy } from "@std/bytes/copy";
 
 const MAX_SIZE = 2 ** 32 - 2;
 const DEFAULT_CHUNK_SIZE = 16_640;
 
-/** A variable-sized buffer of bytes with `read()` and `write()` methods.
+/** Options for {@linkcode Buffer.bytes}. */
+export interface BufferBytesOptions {
+  /**
+   * If true, {@linkcode Buffer.bytes} will return a copy of the buffered data.
+   *
+   * If false, it will return a slice to the buffer's data.
+   *
+   * @default {true}
+   */
+  copy?: boolean;
+}
+
+/**
+ * A variable-sized buffer of bytes with `readable` and `writable` getters that
+ * allows you to work with {@link https://developer.mozilla.org/en-US/docs/Web/API/Streams_API | Web Streams API}.
  *
  * Buffer is almost always used with some I/O like files and sockets. It allows
  * one to buffer up a download from a socket. Buffer grows and shrinks as
@@ -18,7 +33,38 @@ const DEFAULT_CHUNK_SIZE = 16_640;
  * ArrayBuffer is a fixed memory allocation. Buffer is implemented on top of
  * ArrayBuffer.
  *
- * Based on [Go Buffer](https://golang.org/pkg/bytes/#Buffer). */
+ * Based on {@link https://golang.org/pkg/bytes/#Buffer | Go Buffer}.
+ *
+ * @example Buffer input bytes and convert it to a string
+ * ```ts
+ * import { Buffer } from "@std/streams/buffer";
+ * import { toText } from "@std/streams/to-text";
+ * import { assert } from "@std/assert";
+ * import { assertEquals } from "@std/assert";
+ *
+ * // Create a new buffer
+ * const buf = new Buffer();
+ * assertEquals(buf.capacity, 0);
+ * assertEquals(buf.length, 0);
+ *
+ * // Dummy input stream
+ * const inputStream = ReadableStream.from([
+ *   "hello, ",
+ *   "world",
+ *   "!",
+ * ]);
+ *
+ * // Pipe the input stream to the buffer
+ * await inputStream.pipeThrough(new TextEncoderStream()).pipeTo(buf.writable);
+ * assert(buf.capacity > 0);
+ * assert(buf.length > 0);
+ *
+ * // Convert the buffered bytes to a string
+ * const result = await toText(buf.readable);
+ * assertEquals(result, "hello, world!");
+ * assert(buf.empty());
+ * ```
+ */
 export class Buffer {
   #buf: Uint8Array; // contents are the bytes buf[off : len(buf)]
   #off = 0; // read at buf[off], write at buf[buf.byteLength]
@@ -39,68 +85,261 @@ export class Buffer {
     },
     autoAllocateChunkSize: DEFAULT_CHUNK_SIZE,
   });
-  get readable() {
+
+  /**
+   * Getter returning the instance's {@linkcode ReadableStream}.
+   *
+   * @returns A `ReadableStream` of the buffer.
+   *
+   * @example Read the content out of the buffer to stdout
+   * ```ts ignore
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const buf = new Buffer();
+   * await buf.readable.pipeTo(Deno.stdout.writable);
+   * ```
+   */
+  get readable(): ReadableStream<Uint8Array> {
     return this.#readable;
   }
+
   #writable = new WritableStream<Uint8Array>({
     write: (chunk) => {
       const m = this.#grow(chunk.byteLength);
       copy(chunk, this.#buf, m);
     },
   });
-  get writable() {
+
+  /**
+   * Getter returning the instance's {@linkcode WritableStream}.
+   *
+   * @returns A `WritableStream` of the buffer.
+   *
+   * @example Write the data from stdin to the buffer
+   * ```ts ignore
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const buf = new Buffer();
+   * await Deno.stdin.readable.pipeTo(buf.writable);
+   * ```
+   */
+  get writable(): WritableStream<Uint8Array> {
     return this.#writable;
   }
 
+  /**
+   * Constructs a new instance.
+   *
+   * @param ab An optional buffer to use as the initial buffer.
+   */
   constructor(ab?: ArrayBufferLike | ArrayLike<number>) {
     this.#buf = ab === undefined ? new Uint8Array(0) : new Uint8Array(ab);
   }
 
-  /** Returns a slice holding the unread portion of the buffer.
+  /**
+   * Returns a slice holding the unread portion of the buffer.
    *
    * The slice is valid for use only until the next buffer modification (that
-   * is, only until the next call to a method like `read()`, `write()`,
-   * `reset()`, or `truncate()`). If `options.copy` is false the slice aliases the buffer content at
-   * least until the next buffer modification, so immediate changes to the
-   * slice will affect the result of future reads.
-   * @param options Defaults to `{ copy: true }`
+   * is, only until the next call to a method that mutates or consumes the
+   * buffer, like reading data out via `readable`, `reset()`, or `truncate()`).
+   *
+   * If `options.copy` is false the slice aliases the buffer content at least
+   * until the next buffer modification, so immediate changes to the slice will
+   * affect the result of future reads. If `options` is not provided,
+   * `options.copy` defaults to `true`.
+   *
+   * @param options Options for the bytes method.
+   * @returns A copy or a slice of the buffer.
+   *
+   * @example Copy the buffer
+   * ```ts
+   * import { assertEquals } from "@std/assert";
+   * import { assertNotEquals } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const array = new Uint8Array([0, 1, 2]);
+   * const buf = new Buffer(array.buffer);
+   * const copied = buf.bytes();
+   * assertEquals(copied.length, array.length);
+   *
+   * // Modify an element in the original array
+   * array[1] = 99;
+   * assertEquals(copied[0], array[0]);
+   * // The copied buffer is not affected by the modification
+   * assertNotEquals(copied[1], array[1]);
+   * assertEquals(copied[2], array[2]);
+   * ```
+   *
+   * @example Get a slice to the buffer
+   * ```ts
+   * import { assertEquals } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const array = new Uint8Array([0, 1, 2]);
+   * const buf = new Buffer(array.buffer);
+   * const slice = buf.bytes({ copy: false });
+   * assertEquals(slice.length, array.length);
+   *
+   * // Modify an element in the original array
+   * array[1] = 99;
+   * assertEquals(slice[0], array[0]);
+   * // The slice _is_ affected by the modification
+   * assertEquals(slice[1], array[1]);
+   * assertEquals(slice[2], array[2]);
+   * ```
    */
-  bytes(options = { copy: true }): Uint8Array {
+  bytes(options: BufferBytesOptions = { copy: true }): Uint8Array {
     if (options.copy === false) return this.#buf.subarray(this.#off);
     return this.#buf.slice(this.#off);
   }
 
-  /** Returns whether the unread portion of the buffer is empty. */
+  /**
+   * Returns whether the unread portion of the buffer is empty.
+   *
+   * @returns Whether the buffer is empty.
+   *
+   * @example Empty buffer
+   * ```ts
+   * import { assert } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const buf = new Buffer();
+   * assert(buf.empty());
+   * ```
+   *
+   * @example Non-empty buffer
+   * ```ts
+   * import { assert } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const array = new Uint8Array([42]);
+   * const buf = new Buffer(array.buffer);
+   * assert(!buf.empty());
+   * ```
+   *
+   * @example Non-empty, but the content was already read
+   * ```ts ignore
+   * import { assert } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const array = new Uint8Array([42]);
+   * const buf = new Buffer(array.buffer);
+   * assert(!buf.empty());
+   * // Read the content out of the buffer
+   * await buf.readable.pipeTo(Deno.stdout.writable);
+   * // The buffer is now empty
+   * assert(buf.empty());
+   * ```
+   */
   empty(): boolean {
     return this.#buf.byteLength <= this.#off;
   }
 
-  /** A read only number of bytes of the unread portion of the buffer. */
+  /**
+   * A read only number of bytes of the unread portion of the buffer.
+   *
+   * @returns The number of bytes in the unread portion of the buffer.
+   *
+   * @example Basic usage
+   * ```ts
+   * import { assertEquals } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const array = new Uint8Array([0, 1, 2]);
+   * const buf = new Buffer(array.buffer);
+   * assertEquals(buf.length, 3);
+   * ```
+   *
+   * @example Length becomes 0 after the content is read
+   * ```ts ignore
+   * import { assertEquals } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const array = new Uint8Array([42]);
+   * const buf = new Buffer(array.buffer);
+   * assertEquals(buf.length, 1);
+   * // Read the content out of the buffer
+   * await buf.readable.pipeTo(Deno.stdout.writable);
+   * // The length is now 0
+   * assertEquals(buf.length, 0);
+   * ```
+   */
   get length(): number {
     return this.#buf.byteLength - this.#off;
   }
 
-  /** The read only capacity of the buffer's underlying byte slice, that is,
-   * the total space allocated for the buffer's data. */
+  /**
+   * The read only capacity of the buffer's underlying byte slice, that is,
+   * the total space allocated for the buffer's data.
+   *
+   * @returns The number of allocated bytes for the buffer.
+   *
+   * @example Basic usage
+   * ```ts
+   * import { assertEquals } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const arrayBuffer = new ArrayBuffer(256);
+   * const buf = new Buffer(arrayBuffer);
+   * assertEquals(buf.capacity, 256);
+   * ```
+   */
   get capacity(): number {
     return this.#buf.buffer.byteLength;
   }
 
-  /** Discards all but the first `n` unread bytes from the buffer but
+  /**
+   * Discards all but the first `n` unread bytes from the buffer but
    * continues to use the same allocated storage. It throws if `n` is
-   * negative or greater than the length of the buffer. */
+   * negative or greater than the length of the buffer.
+   *
+   * @param n The number of bytes to keep.
+   *
+   * @example Basic usage
+   * ```ts
+   * import { assertEquals } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const array = new Uint8Array([0, 1, 2]);
+   * const buf = new Buffer(array.buffer);
+   * assertEquals(buf.bytes(), array);
+   *
+   * // Discard all but the first 2 bytes
+   * buf.truncate(2);
+   * assertEquals(buf.bytes(), array.slice(0, 2));
+   * ```
+   */
   truncate(n: number): void {
     if (n === 0) {
       this.reset();
       return;
     }
     if (n < 0 || n > this.length) {
-      throw Error("bytes.Buffer: truncation out of range");
+      throw new Error(
+        `Buffer truncation value "${n}" is not between 0 and ${this.length}`,
+      );
     }
     this.#reslice(this.#off + n);
   }
 
-  reset(): void {
+  /**
+   * Resets to an empty buffer.
+   *
+   * @example Basic usage
+   * ```ts
+   * import { assert } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const array = new Uint8Array([0, 1, 2]);
+   * const buf = new Buffer(array.buffer);
+   * assert(!buf.empty());
+   *
+   * // Reset
+   * buf.reset();
+   * assert(buf.empty());
+   * ```
+   */
+  reset() {
     this.#reslice(0);
     this.#off = 0;
   }
@@ -115,7 +354,6 @@ export class Buffer {
   }
 
   #reslice(len: number) {
-    assert(len <= this.#buf.buffer.byteLength);
     this.#buf = new Uint8Array(this.#buf.buffer, 0, len);
   }
 
@@ -138,7 +376,9 @@ export class Buffer {
       // don't spend all our time copying.
       copy(this.#buf.subarray(this.#off), this.#buf);
     } else if (c + n > MAX_SIZE) {
-      throw new Error("The buffer cannot be grown beyond the maximum size.");
+      throw new Error(
+        `The buffer cannot grow beyond the maximum size of ${MAX_SIZE}`,
+      );
     } else {
       // Not enough space anywhere, we need to allocate.
       const buf = new Uint8Array(Math.min(2 * c + n, MAX_SIZE));
@@ -151,84 +391,37 @@ export class Buffer {
     return m;
   }
 
-  /** Grows the buffer's capacity, if necessary, to guarantee space for
+  /**
+   * Grows the buffer's capacity, if necessary, to guarantee space for
    * another `n` bytes. After `.grow(n)`, at least `n` bytes can be written to
    * the buffer without another allocation. If `n` is negative, `.grow()` will
    * throw. If the buffer can't grow it will throw an error.
    *
+   * @param n The number of bytes to grow the buffer by.
+   *
    * Based on Go Lang's
-   * [Buffer.Grow](https://golang.org/pkg/bytes/#Buffer.Grow). */
-  grow(n: number): void {
+   * {@link https://golang.org/pkg/bytes/#Buffer.Grow | Buffer.Grow}.
+   *
+   * @example Basic usage
+   * ```ts
+   * import { assert } from "@std/assert";
+   * import { assertEquals } from "@std/assert";
+   * import { Buffer } from "@std/streams/buffer";
+   *
+   * const buf = new Buffer();
+   * assertEquals(buf.capacity, 0);
+   *
+   * buf.grow(200);
+   * assert(buf.capacity >= 200);
+   * ```
+   */
+  grow(n: number) {
     if (n < 0) {
-      throw Error("Buffer.grow: negative count");
+      throw new Error(
+        `Cannot grow buffer as growth must be positive: received ${n}`,
+      );
     }
     const m = this.#grow(n);
     this.#reslice(m);
-  }
-}
-
-/** A TransformStream that will only read & enqueue `size` amount of bytes.
- * This operation is chunk based and not BYOB based,
- * and as such will read more than needed.
- *
- * if options.error is set, then instead of terminating the stream,
- * an error will be thrown.
- *
- * ```ts
- * import { LimitedBytesTransformStream } from "./buffer.ts";
- * const res = await fetch("https://example.com");
- * const parts = res.body!
- *   .pipeThrough(new LimitedBytesTransformStream(512 * 1024));
- * ```
- */
-export class LimitedBytesTransformStream
-  extends TransformStream<Uint8Array, Uint8Array> {
-  #read = 0;
-  constructor(size: number, options: { error?: boolean } = {}) {
-    super({
-      transform: (chunk, controller) => {
-        if ((this.#read + chunk.byteLength) > size) {
-          if (options.error) {
-            throw new RangeError(`Exceeded byte size limit of '${size}'`);
-          } else {
-            controller.terminate();
-          }
-        } else {
-          this.#read += chunk.byteLength;
-          controller.enqueue(chunk);
-        }
-      },
-    });
-  }
-}
-
-/** A TransformStream that will only read & enqueue `size` amount of chunks.
- *
- * if options.error is set, then instead of terminating the stream,
- * an error will be thrown.
- *
- * ```ts
- * import { LimitedTransformStream } from "./buffer.ts";
- * const res = await fetch("https://example.com");
- * const parts = res.body!.pipeThrough(new LimitedTransformStream(50));
- * ```
- */
-export class LimitedTransformStream<T> extends TransformStream<T, T> {
-  #read = 0;
-  constructor(size: number, options: { error?: boolean } = {}) {
-    super({
-      transform: (chunk, controller) => {
-        if ((this.#read + 1) > size) {
-          if (options.error) {
-            throw new RangeError(`Exceeded chunk limit of '${size}'`);
-          } else {
-            controller.terminate();
-          }
-        } else {
-          this.#read++;
-          controller.enqueue(chunk);
-        }
-      },
-    });
   }
 }

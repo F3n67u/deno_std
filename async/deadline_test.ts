@@ -1,28 +1,40 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import { assertEquals, assertRejects } from "../testing/asserts.ts";
-import { deferred } from "./deferred.ts";
-import { deadline, DeadlineError } from "./deadline.ts";
+// Copyright 2018-2025 the Deno authors. MIT license.
+import { assertEquals, assertRejects } from "@std/assert";
+import { delay } from "./delay.ts";
+import { deadline } from "./deadline.ts";
 
-Deno.test("[async] deadline: return fulfilled promise", async () => {
-  const p = deferred();
-  const t = setTimeout(() => p.resolve("Hello"), 100);
+Deno.test("deadline() returns fulfilled promise", async () => {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const p = delay(100, { signal })
+    .catch(() => {})
+    .then(() => "Hello");
   const result = await deadline(p, 1000);
   assertEquals(result, "Hello");
-  clearTimeout(t);
+  controller.abort();
 });
 
-Deno.test("[async] deadline: throws DeadlineError", async () => {
-  const p = deferred();
-  const t = setTimeout(() => p.resolve("Hello"), 1000);
-  await assertRejects(async () => {
-    await deadline(p, 100);
-  }, DeadlineError);
-  clearTimeout(t);
+Deno.test("deadline() throws DOMException", async () => {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const p = delay(1000, { signal })
+    .catch(() => {})
+    .then(() => "Hello");
+  const error = await assertRejects(
+    () => deadline(p, 100),
+    DOMException,
+    "Signal timed out.",
+  );
+  assertEquals(error.name, "TimeoutError");
+  controller.abort();
 });
 
-Deno.test("[async] deadline: thrown when promise is rejected", async () => {
-  const p = deferred();
-  const t = setTimeout(() => p.reject(new Error("booom")), 100);
+Deno.test("deadline() throws when promise is rejected", async () => {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const p = delay(100, { signal })
+    .catch(() => {})
+    .then(() => Promise.reject(new Error("booom")));
   await assertRejects(
     async () => {
       await deadline(p, 1000);
@@ -30,5 +42,52 @@ Deno.test("[async] deadline: thrown when promise is rejected", async () => {
     Error,
     "booom",
   );
-  clearTimeout(t);
+  controller.abort();
+});
+
+Deno.test("deadline() handles non-aborted signal", async () => {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const p = delay(100, { signal })
+    .catch(() => {})
+    .then(() => "Hello");
+  const abort = new AbortController();
+  const result = await deadline(p, 1000, { signal: abort.signal });
+  assertEquals(result, "Hello");
+  controller.abort();
+});
+
+Deno.test("deadline() handles aborted signal after delay", async () => {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const p = delay(100, { signal })
+    .catch(() => {})
+    .then(() => "Hello");
+  const abort = new AbortController();
+  const promise = deadline(p, 100, { signal: abort.signal });
+  abort.abort();
+  const error = await assertRejects(
+    () => promise,
+    DOMException,
+    "The signal has been aborted",
+  );
+  assertEquals(error.name, "AbortError");
+  controller.abort();
+});
+
+Deno.test("deadline() handles already aborted signal", async () => {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const p = delay(100, { signal })
+    .catch(() => {})
+    .then(() => "Hello");
+  const abort = new AbortController();
+  abort.abort();
+  const error = await assertRejects(
+    () => deadline(p, 100, { signal: abort.signal }),
+    DOMException,
+    "The signal has been aborted",
+  );
+  assertEquals(error.name, "AbortError");
+  controller.abort();
 });

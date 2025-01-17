@@ -1,15 +1,24 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
- * If the given value is part of the given object it returns true, otherwise it
+ * Returns true if the given value is part of the given object, otherwise it
  * returns false.
- * Doesn't work with non-primitive values: includesValue({x: {}}, {}) returns false.
  *
- * Example:
+ * Note: this doesn't work with non-primitive values. For example,
+ * `includesValue({x: {}}, {})` returns false.
+ *
+ * @typeParam T The type of the values in the input record.
+ *
+ * @param record The record to check for the given value.
+ * @param value The value to check for in the record.
+ *
+ * @returns `true` if the value is part of the record, otherwise `false`.
+ *
+ * @example Basic usage
  * ```ts
- * import { includesValue } from "https://deno.land/std@$STD_VERSION/collections/mod.ts";
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts";
+ * import { includesValue } from "@std/collections/includes-value";
+ * import { assertEquals } from "@std/assert";
  *
  * const input = {
  *   first: 33,
@@ -17,8 +26,8 @@
  * };
  *
  * assertEquals(includesValue(input, 34), true);
+ * ```
  */
-
 export function includesValue<T>(
   record: Readonly<Record<string, T>>,
   value: T,

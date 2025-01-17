@@ -1,0 +1,23 @@
+{
+  "name": "@std/fs",
+  "version": "1.0.9",
+  "exports": {
+    ".": "./mod.ts",
+    "./copy": "./copy.ts",
+    "./empty-dir": "./empty_dir.ts",
+    "./ensure-dir": "./ensure_dir.ts",
+    "./ensure-file": "./ensure_file.ts",
+    "./ensure-link": "./ensure_link.ts",
+    "./ensure-symlink": "./ensure_symlink.ts",
+    "./eol": "./eol.ts",
+    "./exists": "./exists.ts",
+    "./expand-glob": "./expand_glob.ts",
+    "./move": "./move.ts",
+    "./unstable-chmod": "./unstable_chmod.ts",
+    "./unstable-lstat": "./unstable_lstat.ts",
+    "./unstable-read-dir": "./unstable_read_dir.ts",
+    "./unstable-stat": "./unstable_stat.ts",
+    "./unstable-types": "./unstable_types.ts",
+    "./walk": "./walk.ts"
+  }
+}

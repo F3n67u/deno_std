@@ -1,53 +1,64 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import * as path from "../path/mod.ts";
+// Copyright 2018-2025 the Deno authors. MIT license.
+import { dirname } from "@std/path/dirname";
 import { ensureDir, ensureDirSync } from "./ensure_dir.ts";
-import { exists, existsSync } from "./exists.ts";
-import { getFileInfoType } from "./_util.ts";
+import { toPathString } from "./_to_path_string.ts";
 
 /**
- * Ensures that the hard link exists.
- * If the directory structure does not exist, it is created.
+ * Asynchronously ensures that the hard link exists.
  *
- * @param src the source file path. Directory hard links are not allowed.
- * @param dest the destination link path
+ * If the parent directories for the hard link do not exist, they are created.
+ *
+ * Requires `--allow-read` and `--allow-write` permissions.
+ *
+ * @see {@link https://docs.deno.com/runtime/manual/basics/permissions#file-system-access}
+ * for more information on Deno's permissions system.
+ *
+ * @param src The source file path as a string or URL. Directory hard links are
+ * not allowed.
+ * @param dest The destination link path as a string or URL.
+ *
+ * @returns A void promise that resolves once the hard link exists.
+ *
+ * @example Usage
+ * ```ts ignore
+ * import { ensureLink } from "@std/fs/ensure-link";
+ *
+ * await ensureLink("./folder/targetFile.dat", "./folder/targetFile.link.dat");
+ * ```
  */
-export async function ensureLink(src: string, dest: string) {
-  if (await exists(dest)) {
-    const destStatInfo = await Deno.lstat(dest);
-    const destFilePathType = getFileInfoType(destStatInfo);
-    if (destFilePathType !== "file") {
-      throw new Error(
-        `Ensure path exists, expected 'file', got '${destFilePathType}'`,
-      );
-    }
-    return;
-  }
+export async function ensureLink(src: string | URL, dest: string | URL) {
+  dest = toPathString(dest);
+  await ensureDir(dirname(dest));
 
-  await ensureDir(path.dirname(dest));
-
-  await Deno.link(src, dest);
+  await Deno.link(toPathString(src), dest);
 }
 
 /**
- * Ensures that the hard link exists.
- * If the directory structure does not exist, it is created.
+ * Synchronously ensures that the hard link exists.
  *
- * @param src the source file path. Directory hard links are not allowed.
- * @param dest the destination link path
+ * If the parent directories for the hard link do not exist, they are created.
+ *
+ * Requires `--allow-read` and `--allow-write` permissions.
+ *
+ * @see {@link https://docs.deno.com/runtime/manual/basics/permissions#file-system-access}
+ * for more information on Deno's permissions system.
+ *
+ * @param src The source file path as a string or URL. Directory hard links are
+ * not allowed.
+ * @param dest The destination link path as a string or URL.
+ *
+ * @returns A void value that returns once the hard link exists.
+ *
+ * @example Usage
+ * ```ts ignore
+ * import { ensureLinkSync } from "@std/fs/ensure-link";
+ *
+ * ensureLinkSync("./folder/targetFile.dat", "./folder/targetFile.link.dat");
+ * ```
  */
-export function ensureLinkSync(src: string, dest: string): void {
-  if (existsSync(dest)) {
-    const destStatInfo = Deno.lstatSync(dest);
-    const destFilePathType = getFileInfoType(destStatInfo);
-    if (destFilePathType !== "file") {
-      throw new Error(
-        `Ensure path exists, expected 'file', got '${destFilePathType}'`,
-      );
-    }
-    return;
-  }
+export function ensureLinkSync(src: string | URL, dest: string | URL) {
+  dest = toPathString(dest);
+  ensureDirSync(dirname(dest));
 
-  ensureDirSync(path.dirname(dest));
-
-  Deno.linkSync(src, dest);
+  Deno.linkSync(toPathString(src), dest);
 }

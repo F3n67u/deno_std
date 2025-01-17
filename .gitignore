@@ -1,11 +1,23 @@
+deno.lock
+http/testdata/%25A.txt
+http/testdata/file#2.txt
+http/testdata/test file.txt
+docs/
+
+# rust build output
+crypto/_wasm/target
+cli/testdata/unicode_width_crate/target
+
+# coverage
+coverage/
+cov.lcov
+codecov
+codecov.SHA256SUM
+codecov.SHA256SUM.sig
+
+# misc files
 .DS_Store
 .idea
-deno.d.ts
-/node_modules
-package.json
-package-lock.json
-.vscode/settings.json
-**/cov/
-/_wasm_crypto/target
-# TODO(nayeemrmn): Remove (https://github.com/denoland/deno_std/pull/1819#issuecomment-1011136991).
-/_deno_unstable_checked.ts
+.vim
+_tmp/
+!_tmp/.keep

@@ -1,4 +1,4 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 import { bytesToUuid } from "./_common.ts";
@@ -7,8 +7,21 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * Validates the UUID v1.
+ * Determines whether a string is a valid
+ * {@link https://www.rfc-editor.org/rfc/rfc9562.html#section-5.1 | UUIDv1}.
+ *
  * @param id UUID value.
+ *
+ * @returns `true` if the string is a valid UUIDv1, otherwise `false`.
+ *
+ * @example Usage
+ * ```ts
+ * import { validate } from "@std/uuid/v1";
+ * import { assert, assertFalse } from "@std/assert";
+ *
+ * assert(validate("ea71fc60-a713-11ee-af61-8349da24f689"));
+ * assertFalse(validate("fac8c1e0-ad1a-4204-a0d0-8126ae84495d"));
+ * ```
  */
 export function validate(id: string): boolean {
   return UUID_RE.test(id);
@@ -20,31 +33,73 @@ let _clockseq: number;
 let _lastMSecs = 0;
 let _lastNSecs = 0;
 
-/** The options used for generating a v1 UUID. */
-export interface V1Options {
+/** Options for {@linkcode generate}. */
+export interface GenerateOptions {
+  /**
+   * An array of 6 bytes that represents a 48-bit IEEE 802 MAC address.
+   *
+   * @see {@link https://www.rfc-editor.org/rfc/rfc4122#section-4.1.6}
+   */
   node?: number[];
+  /**
+   * A 14-bit value used to avoid duplicates that could arise when the clock is
+   * set backwards in time or if the node ID changes (0 - 16383).
+   *
+   * @see {@link https://www.rfc-editor.org/rfc/rfc4122#section-4.1.5}
+   */
   clockseq?: number;
+  /**
+   * The number of milliseconds since the Unix epoch (January 1, 1970).
+   *
+   * @see {@link https://www.rfc-editor.org/rfc/rfc4122#section-4.1.4}
+   */
   msecs?: number;
+  /**
+   * The number of nanoseconds to add to {@linkcode V1Options.msecs}
+   * (0 - 10,000).
+   *
+   * @see {@link https://www.rfc-editor.org/rfc/rfc4122#section-4.1.4}
+   */
   nsecs?: number;
+  /** An array of 16 random bytes (0 - 255). */
   random?: number[];
+  /**
+   * A function that returns an array of 16 random bytes (0 - 255).
+   * Alternative to {@linkcode V1Options.random}.
+   */
   rng?: () => number[];
 }
 
 /**
- * Generates a RFC4122 v1 UUID (time-based).
+ * Generates a
+ * {@link https://www.rfc-editor.org/rfc/rfc9562.html#section-5.1 | UUIDv1}.
+ *
  * @param options Can use RFC time sequence values as overwrites.
  * @param buf Can allow the UUID to be written in byte-form starting at the offset.
  * @param offset Index to start writing on the UUID bytes in buffer.
+ *
+ * @returns Returns a UUIDv1 string or an array of 16 bytes.
+ *
+ * @example Usage
+ * ```ts
+ * import { generate, validate } from "@std/uuid/v1";
+ * import { assert } from "@std/assert";
+ *
+ * const options = {
+ *   node: [0x01, 0x23, 0x45, 0x67, 0x89, 0xab],
+ *   clockseq: 0x1234,
+ *   msecs: new Date("2011-11-01").getTime(),
+ *   nsecs: 5678,
+ * };
+ *
+ * const uuid = generate(options);
+ * assert(validate(uuid as string));
+ * ```
  */
-export function generate(
-  options?: V1Options | null,
-  buf?: number[],
-  offset?: number,
-): string | number[] {
-  let i = (buf && offset) || 0;
-  const b = buf ?? [];
+export function generate(options: GenerateOptions = {}): string {
+  let i = 0;
+  const b = [];
 
-  options ??= {};
   let { node = _nodeId, clockseq = _clockseq } = options;
 
   if (node === undefined || clockseq === undefined) {
@@ -85,10 +140,19 @@ export function generate(
     throw new Error("Can't create more than 10M uuids/sec");
   }
 
+  if (node.length !== 6) {
+    throw new Error(
+      "Cannot create UUID: the node option must be an array of 6 bytes",
+    );
+  }
+
   _lastMSecs = msecs;
   _lastNSecs = nsecs;
   _clockseq = clockseq;
 
+  // We have to add this value because "msecs" here is the number of
+  // milliseconds since January 1, 1970, not since October 15, 1582.
+  // This is also the milliseconds from October 15, 1582 to January 1, 1970.
   msecs += 12219292800000;
 
   const tl = ((msecs & 0xfffffff) * 10000 + nsecs) % 0x100000000;
@@ -109,8 +173,8 @@ export function generate(
   b[i++] = clockseq & 0xff;
 
   for (let n = 0; n < 6; ++n) {
-    b[i + n] = node[n];
+    b[i + n] = node[n]!;
   }
 
-  return buf ?? bytesToUuid(b);
+  return bytesToUuid(b);
 }

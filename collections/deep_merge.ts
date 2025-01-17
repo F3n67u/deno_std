@@ -1,30 +1,96 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
-
-// deno-lint-ignore-file ban-types
 
 import { filterInPlace } from "./_utils.ts";
 
-const { hasOwn } = Object;
-
 /**
- * Merges the two given Records, recursively merging any nested Records with
- * the second collection overriding the first in case of conflict
+ * Merges the two given records, recursively merging any nested records with the
+ * second collection overriding the first in case of conflict.
  *
  * For arrays, maps and sets, a merging strategy can be specified to either
- * "replace" values, or "merge" them instead.
- * Use "includeNonEnumerable" option to include non enumerable properties too.
+ * `replace` values, or `merge` them instead.
  *
- * Example:
+ * @typeParam T Type of the first record
  *
+ * @param record First record to merge.
+ * @param other Second record to merge.
+ * @param options Merging options.
+ *
+ * @returns A new record with the merged values.
+ *
+ * @example Merge objects
  * ```ts
- * import { deepMerge } from "https://deno.land/std@$STD_VERSION/collections/mod.ts";
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts";
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
  *
- * const a = {foo: true}
- * const b = {foo: {bar: true}}
+ * const a = { foo: true };
+ * const b = { foo: { bar: true } };
  *
- * assertEquals(deepMerge(a, b), {foo: {bar: true}});
+ * const result = deepMerge(a, b);
+ *
+ * const expected = { foo: { bar: true } };
+ *
+ * assertEquals(result, expected);
+ * ```
+ *
+ * @example Merge arrays
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: [1, 2] };
+ * const b = { foo: [3, 4] };
+ *
+ * const result = deepMerge(a, b);
+ *
+ * const expected = { foo: [1, 2, 3, 4] };
+ *
+ * assertEquals(result, expected);
+ * ```
+ *
+ * @example Merge maps
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: new Map([["a", 1]]) };
+ * const b = { foo: new Map([["b", 2]]) };
+ *
+ * const result = deepMerge(a, b);
+ *
+ * const expected = { foo: new Map([["a", 1], ["b", 2]]) };
+ *
+ * assertEquals(result, expected);
+ * ```
+ *
+ * @example Merge sets
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: new Set([1]) };
+ * const b = { foo: new Set([2]) };
+ *
+ * const result = deepMerge(a, b);
+ *
+ * const expected = { foo: new Set([1, 2]) };
+ *
+ * assertEquals(result, expected);
+ * ```
+ *
+ * @example Merge with custom options
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: [1, 2] };
+ * const b = { foo: [3, 4] };
+ *
+ * const result = deepMerge(a, b, { arrays: "replace" });
+ *
+ * const expected = { foo: [3, 4] };
+ *
+ * assertEquals(result, expected);
  * ```
  */
 export function deepMerge<
@@ -34,7 +100,98 @@ export function deepMerge<
   other: Partial<Readonly<T>>,
   options?: Readonly<DeepMergeOptions>,
 ): T;
-
+/**
+ * Merges the two given records, recursively merging any nested records with the
+ * second collection overriding the first in case of conflict.
+ *
+ * For arrays, maps and sets, a merging strategy can be specified to either
+ * `replace` values, or `merge` them instead.
+ *
+ * @typeParam T Type of the first record
+ * @typeParam U Type of the second record
+ * @typeParam Options Merging options
+ *
+ * @param record First record to merge.
+ * @param other Second record to merge.
+ * @param options Merging options.
+ *
+ * @returns A new record with the merged values.
+ *
+ * @example Merge objects
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: true };
+ * const b = { foo: { bar: true } };
+ *
+ * const result = deepMerge(a, b);
+ *
+ * const expected = { foo: { bar: true } };
+ *
+ * assertEquals(result, expected);
+ * ```
+ *
+ * @example Merge arrays
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: [1, 2] };
+ * const b = { foo: [3, 4] };
+ *
+ * const result = deepMerge(a, b);
+ *
+ * const expected = { foo: [1, 2, 3, 4] };
+ *
+ * assertEquals(result, expected);
+ * ```
+ *
+ * @example Merge maps
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: new Map([["a", 1]]) };
+ * const b = { foo: new Map([["b", 2]]) };
+ *
+ * const result = deepMerge(a, b);
+ *
+ * const expected = { foo: new Map([["a", 1], ["b", 2]]) };
+ *
+ * assertEquals(result, expected);
+ * ```
+ *
+ * @example Merge sets
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: new Set([1]) };
+ * const b = { foo: new Set([2]) };
+ *
+ * const result = deepMerge(a, b);
+ *
+ * const expected = { foo: new Set([1, 2]) };
+ *
+ * assertEquals(result, expected);
+ * ```
+ *
+ * @example Merge with custom options
+ * ```ts
+ * import { deepMerge } from "@std/collections/deep-merge";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const a = { foo: [1, 2] };
+ * const b = { foo: [3, 4] };
+ *
+ * const result = deepMerge(a, b, { arrays: "replace" });
+ *
+ * const expected = { foo: [3, 4] };
+ *
+ * assertEquals(result, expected);
+ * ```
+ */
 export function deepMerge<
   T extends Record<PropertyKey, unknown>,
   U extends Record<PropertyKey, unknown>,
@@ -44,7 +201,6 @@ export function deepMerge<
   other: Readonly<U>,
   options?: Readonly<Options>,
 ): DeepMerge<T, U, Options>;
-
 export function deepMerge<
   T extends Record<PropertyKey, unknown>,
   U extends Record<PropertyKey, unknown>,
@@ -58,6 +214,23 @@ export function deepMerge<
   other: Readonly<U>,
   options?: Readonly<Options>,
 ): DeepMerge<T, U, Options> {
+  return deepMergeInternal(record, other, new Set(), options);
+}
+
+function deepMergeInternal<
+  T extends Record<PropertyKey, unknown>,
+  U extends Record<PropertyKey, unknown>,
+  Options extends DeepMergeOptions = {
+    arrays: "merge";
+    sets: "merge";
+    maps: "merge";
+  },
+>(
+  record: Readonly<T>,
+  other: Readonly<U>,
+  seen: Set<NonNullable<unknown>>,
+  options?: Readonly<Options>,
+) {
   // Extract options
   // Clone left operand to avoid performing mutations in-place
   type Result = DeepMerge<T, U, Options>;
@@ -79,7 +252,7 @@ export function deepMerge<
 
     const a = record[key] as ResultMember;
 
-    if (!hasOwn(other, key)) {
+    if (!Object.hasOwn(other, key)) {
       result[key] = a;
 
       continue;
@@ -87,8 +260,12 @@ export function deepMerge<
 
     const b = other[key] as ResultMember;
 
-    if (isNonNullObject(a) && isNonNullObject(b)) {
-      result[key] = mergeObjects(a, b, options) as ResultMember;
+    if (
+      isNonNullObject(a) && isNonNullObject(b) && !seen.has(a) && !seen.has(b)
+    ) {
+      seen.add(a);
+      seen.add(b);
+      result[key] = mergeObjects(a, b, seen, options) as ResultMember;
 
       continue;
     }
@@ -101,17 +278,18 @@ export function deepMerge<
 }
 
 function mergeObjects(
-  left: Readonly<NonNullable<object>>,
-  right: Readonly<NonNullable<object>>,
+  left: Readonly<NonNullable<Record<string, unknown>>>,
+  right: Readonly<NonNullable<Record<string, unknown>>>,
+  seen: Set<NonNullable<unknown>>,
   options: Readonly<DeepMergeOptions> = {
     arrays: "merge",
     sets: "merge",
     maps: "merge",
   },
-): Readonly<NonNullable<object>> {
+): Readonly<NonNullable<Record<string, unknown> | Iterable<unknown>>> {
   // Recursively merge mergeable objects
   if (isMergeable(left) && isMergeable(right)) {
-    return deepMerge(left, right);
+    return deepMergeInternal(left, right, seen, options);
   }
 
   if (isIterable(left) && isIterable(right)) {
@@ -158,42 +336,56 @@ function mergeObjects(
  * are not considered mergeable (it means that reference will be copied)
  */
 function isMergeable(
-  value: NonNullable<object>,
+  value: NonNullable<unknown>,
 ): value is Record<PropertyKey, unknown> {
   return Object.getPrototypeOf(value) === Object.prototype;
 }
 
 function isIterable(
-  value: NonNullable<object>,
+  value: NonNullable<unknown>,
 ): value is Iterable<unknown> {
   return typeof (value as Iterable<unknown>)[Symbol.iterator] === "function";
 }
 
-function isNonNullObject(value: unknown): value is NonNullable<object> {
+function isNonNullObject(
+  value: unknown,
+): value is NonNullable<Record<string, unknown>> {
   return value !== null && typeof value === "object";
 }
 
-function getKeys<T extends object>(record: T): Array<keyof T> {
-  const ret = Object.getOwnPropertySymbols(record) as Array<keyof T>;
+function getKeys<T extends Record<string, unknown>>(record: T): Array<keyof T> {
+  const result = Object.getOwnPropertySymbols(record) as Array<keyof T>;
   filterInPlace(
-    ret,
+    result,
     (key) => Object.prototype.propertyIsEnumerable.call(record, key),
   );
-  ret.push(...(Object.keys(record) as Array<keyof T>));
+  result.push(...(Object.keys(record) as Array<keyof T>));
 
-  return ret;
+  return result;
 }
 
 /** Merging strategy */
 export type MergingStrategy = "replace" | "merge";
 
-/** Deep merge options */
+/** Options for {@linkcode deepMerge}. */
 export type DeepMergeOptions = {
-  /** Merging strategy for arrays */
+  /**
+   * Merging strategy for arrays
+   *
+   * @default {"merge"}
+   */
   arrays?: MergingStrategy;
-  /** Merging strategy for Maps */
+  /**
+   * Merging strategy for maps.
+   *
+   * @default {"merge"}
+   */
   maps?: MergingStrategy;
-  /** Merging strategy for Sets */
+  /**
+   * Merging strategy for sets.
+   *
+   * @default {"merge"}
+   */
   sets?: MergingStrategy;
 };
 
@@ -258,20 +450,20 @@ export type DeepMergeOptions = {
  */
 
 /** Force intellisense to expand the typing to hide merging typings */
-type ExpandRecursively<T> = T extends Record<PropertyKey, unknown>
+export type ExpandRecursively<T> = T extends Record<PropertyKey, unknown>
   ? T extends infer O ? { [K in keyof O]: ExpandRecursively<O[K]> } : never
   : T;
 
 /** Filter of keys matching a given type */
-type PartialByType<T, U> = {
+export type PartialByType<T, U> = {
   [K in keyof T as T[K] extends U ? K : never]: T[K];
 };
 
 /** Get set values type */
-type SetValueType<T> = T extends Set<infer V> ? V : never;
+export type SetValueType<T> = T extends Set<infer V> ? V : never;
 
 /** Merge all sets types definitions from keys present in both objects */
-type MergeAllSets<
+export type MergeAllSets<
   T,
   U,
   X = PartialByType<T, Set<unknown>>,
@@ -282,10 +474,10 @@ type MergeAllSets<
 > = Z;
 
 /** Get array values type */
-type ArrayValueType<T> = T extends Array<infer V> ? V : never;
+export type ArrayValueType<T> = T extends Array<infer V> ? V : never;
 
 /** Merge all sets types definitions from keys present in both objects */
-type MergeAllArrays<
+export type MergeAllArrays<
   T,
   U,
   X = PartialByType<T, Array<unknown>>,
@@ -298,13 +490,13 @@ type MergeAllArrays<
 > = Z;
 
 /** Get map values types */
-type MapKeyType<T> = T extends Map<infer K, unknown> ? K : never;
+export type MapKeyType<T> = T extends Map<infer K, unknown> ? K : never;
 
 /** Get map values types */
-type MapValueType<T> = T extends Map<unknown, infer V> ? V : never;
+export type MapValueType<T> = T extends Map<unknown, infer V> ? V : never;
 
 /** Merge all sets types definitions from keys present in both objects */
-type MergeAllMaps<
+export type MergeAllMaps<
   T,
   U,
   X = PartialByType<T, Map<unknown, unknown>>,
@@ -318,7 +510,7 @@ type MergeAllMaps<
 > = Z;
 
 /** Merge all records types definitions from keys present in both objects */
-type MergeAllRecords<
+export type MergeAllRecords<
   T,
   U,
   Options,
@@ -330,7 +522,7 @@ type MergeAllRecords<
 > = Z;
 
 /** Exclude map, sets and array from type */
-type OmitComplexes<T> = Omit<
+export type OmitComplexes<T> = Omit<
   T,
   keyof PartialByType<
     T,
@@ -342,7 +534,7 @@ type OmitComplexes<T> = Omit<
 >;
 
 /** Object with keys in either T or U but not in both */
-type ObjectXorKeys<
+export type ObjectXorKeys<
   T,
   U,
   X = Omit<T, keyof U> & Omit<U, keyof T>,
@@ -350,14 +542,14 @@ type ObjectXorKeys<
 > = Y;
 
 /** Merge two objects, with left precedence */
-type MergeRightOmitComplexes<
+export type MergeRightOmitComplexes<
   T,
   U,
   X = ObjectXorKeys<T, U> & OmitComplexes<{ [K in keyof U]: U[K] }>,
 > = X;
 
 /** Merge two objects */
-type Merge<
+export type Merge<
   T,
   U,
   Options,
@@ -382,5 +574,5 @@ export type DeepMerge<
   // Handle objects
   [T, U] extends [Record<PropertyKey, unknown>, Record<PropertyKey, unknown>]
     ? Merge<T, U, Options>
-    : // Handle primitives
-    T | U;
+    // Handle primitives
+    : T | U;

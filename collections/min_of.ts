@@ -1,45 +1,80 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
  * Applies the given selector to all elements of the given collection and
  * returns the min value of all elements. If an empty array is provided the
- * function will return undefined
+ * function will return undefined.
  *
- * Example:
+ * @typeParam T The type of the elements in the array.
  *
+ * @param array The array to find the minimum element in.
+ * @param selector The function to get the value to compare from each element.
+ *
+ * @returns The smallest value of the given function or undefined if there are
+ * no elements.
+ *
+ * @example Basic usage
  * ```ts
- * import { minOf } from "https://deno.land/std@$STD_VERSION/collections/mod.ts"
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts"
+ * import { minOf } from "@std/collections/min-of";
+ * import { assertEquals } from "@std/assert";
  *
  * const inventory = [
- *      { name: "mustard", count: 2 },
- *      { name: "soy", count: 4 },
- *      { name: "tomato", count: 32 },
+ *   { name: "mustard", count: 2 },
+ *   { name: "soy", count: 4 },
+ *   { name: "tomato", count: 32 },
  * ];
- * const minCount = minOf(inventory, (i) => i.count);
+ *
+ * const minCount = minOf(inventory, (item) => item.count);
  *
  * assertEquals(minCount, 2);
  * ```
  */
 export function minOf<T>(
-  array: readonly T[],
+  array: Iterable<T>,
   selector: (el: T) => number,
 ): number | undefined;
-
+/**
+ * Applies the given selector to all elements of the given collection and
+ * returns the min value of all elements. If an empty array is provided the
+ * function will return undefined.
+ *
+ * @typeParam T The type of the elements in the array.
+ *
+ * @param array The array to find the minimum element in.
+ * @param selector The function to get the value to compare from each element.
+ *
+ * @returns The first element that is the smallest value of the given function
+ * or undefined if there are no elements.
+ *
+ * @example Basic usage
+ * ```ts
+ * import { minOf } from "@std/collections/min-of";
+ * import { assertEquals } from "@std/assert";
+ *
+ * const inventory = [
+ *   { name: "mustard", count: 2n },
+ *   { name: "soy", count: 4n },
+ *   { name: "tomato", count: 32n },
+ * ];
+ *
+ * const minCount = minOf(inventory, (item) => item.count);
+ *
+ * assertEquals(minCount, 2n);
+ * ```
+ */
 export function minOf<T>(
-  array: readonly T[],
+  array: Iterable<T>,
   selector: (el: T) => bigint,
 ): bigint | undefined;
-
 export function minOf<T, S extends ((el: T) => number) | ((el: T) => bigint)>(
-  array: readonly T[],
+  array: Iterable<T>,
   selector: S,
 ): ReturnType<S> | undefined {
-  let minimumValue: ReturnType<S> | undefined = undefined;
+  let minimumValue: ReturnType<S> | undefined;
 
-  for (const i of array) {
-    const currentValue = selector(i) as ReturnType<S>;
+  for (const element of array) {
+    const currentValue = selector(element) as ReturnType<S>;
 
     if (minimumValue === undefined || currentValue < minimumValue) {
       minimumValue = currentValue;

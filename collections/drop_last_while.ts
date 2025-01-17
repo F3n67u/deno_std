@@ -1,23 +1,28 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
  * Returns a new array that drops all elements in the given collection until the
- * last element that does not match the given predicate
+ * last element that does not match the given predicate.
  *
- * Example:
+ * @typeParam T The type of the elements in the input array.
+ *
+ * @param array The array to drop elements from.
+ * @param predicate The function to test each element for a condition.
+ *
+ * @returns A new array that drops all elements until the last element that does
+ * not match the given predicate.
+ *
+ * @example Basic usage
  * ```ts
- * import { dropLastWhile } from "https://deno.land/std@$STD_VERSION/collections/mod.ts";
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts";
+ * import { dropLastWhile } from "@std/collections/drop-last-while";
+ * import { assertEquals } from "@std/assert";
  *
- * const numbers = [22, 30, 44];
+ * const numbers = [11, 42, 55, 20, 33, 44];
  *
- * const notFortyFour = dropLastWhile(numbers, i => i != 44);
+ * const notFortyFour = dropLastWhile(numbers, (number) => number > 30);
  *
- * assertEquals(
- *   notFortyFour,
- *   [22, 30]
- * );
+ * assertEquals(notFortyFour, [11, 42, 55, 20]);
  * ```
  */
 export function dropLastWhile<T>(
@@ -25,7 +30,7 @@ export function dropLastWhile<T>(
   predicate: (el: T) => boolean,
 ): T[] {
   let offset = array.length;
-  while (0 < offset && predicate(array[offset - 1])) offset--;
+  while (0 < offset && predicate(array[offset - 1] as T)) offset--;
 
   return array.slice(0, offset);
 }

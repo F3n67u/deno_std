@@ -1,70 +1,165 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
-
-import { Deferred, deferred } from "./deferred.ts";
 
 interface TaggedYieldedValue<T> {
   iterator: AsyncIterator<T>;
   value: T;
 }
 
-/** The MuxAsyncIterator class multiplexes multiple async iterators into a
- * single stream. It currently makes an assumption:
- * - The final result (the value returned and not yielded from the iterator)
- *   does not matter; if there is any, it is discarded.
+/**
+ * Multiplexes multiple async iterators into a single stream. It currently
+ * makes an assumption that the final result (the value returned and not
+ * yielded from the iterator) does not matter; if there is any result, it is
+ * discarded.
+ *
+ * @example Usage
+ * ```ts
+ * import { MuxAsyncIterator } from "@std/async/mux-async-iterator";
+ * import { assertEquals } from "@std/assert";
+ *
+ * async function* gen123(): AsyncIterableIterator<number> {
+ *   yield 1;
+ *   yield 2;
+ *   yield 3;
+ * }
+ *
+ * async function* gen456(): AsyncIterableIterator<number> {
+ *   yield 4;
+ *   yield 5;
+ *   yield 6;
+ * }
+ *
+ * const mux = new MuxAsyncIterator<number>();
+ * mux.add(gen123());
+ * mux.add(gen456());
+ *
+ * const result = await Array.fromAsync(mux);
+ *
+ * assertEquals(result, [1, 4, 2, 5, 3, 6]);
+ * ```
+ *
+ * @typeParam T The type of the provided async iterables and generated async iterable.
  */
 export class MuxAsyncIterator<T> implements AsyncIterable<T> {
-  private iteratorCount = 0;
-  private yields: Array<TaggedYieldedValue<T>> = [];
+  #iteratorCount = 0;
+  #yields: Array<TaggedYieldedValue<T>> = [];
   // deno-lint-ignore no-explicit-any
-  private throws: any[] = [];
-  private signal: Deferred<void> = deferred();
+  #throws: any[] = [];
+  #signal = Promise.withResolvers<void>();
 
-  add(iterable: AsyncIterable<T>): void {
-    ++this.iteratorCount;
-    this.callIteratorNext(iterable[Symbol.asyncIterator]());
+  /**
+   * Add an async iterable to the stream.
+   *
+   * @param iterable The async iterable to add.
+   *
+   * @example Usage
+   * ```ts
+   * import { MuxAsyncIterator } from "@std/async/mux-async-iterator";
+   * import { assertEquals } from "@std/assert";
+   *
+   * async function* gen123(): AsyncIterableIterator<number> {
+   *   yield 1;
+   *   yield 2;
+   *   yield 3;
+   * }
+   *
+   * const mux = new MuxAsyncIterator<number>();
+   * mux.add(gen123());
+   *
+   * const result = await Array.fromAsync(mux.iterate());
+   *
+   * assertEquals(result, [1, 2, 3]);
+   * ```
+   */
+  add(iterable: AsyncIterable<T>) {
+    ++this.#iteratorCount;
+    this.#callIteratorNext(iterable[Symbol.asyncIterator]());
   }
 
-  private async callIteratorNext(
+  async #callIteratorNext(
     iterator: AsyncIterator<T>,
   ) {
     try {
       const { value, done } = await iterator.next();
       if (done) {
-        --this.iteratorCount;
+        --this.#iteratorCount;
       } else {
-        this.yields.push({ iterator, value });
+        this.#yields.push({ iterator, value });
       }
     } catch (e) {
-      this.throws.push(e);
+      this.#throws.push(e);
     }
-    this.signal.resolve();
+    this.#signal.resolve();
   }
 
+  /**
+   * Returns an async iterator of the stream.
+   * @returns the async iterator for all the added async iterables.
+   *
+   * @example Usage
+   * ```ts
+   * import { MuxAsyncIterator } from "@std/async/mux-async-iterator";
+   * import { assertEquals } from "@std/assert";
+   *
+   * async function* gen123(): AsyncIterableIterator<number> {
+   *   yield 1;
+   *   yield 2;
+   *   yield 3;
+   * }
+   *
+   * const mux = new MuxAsyncIterator<number>();
+   * mux.add(gen123());
+   *
+   * const result = await Array.fromAsync(mux.iterate());
+   *
+   * assertEquals(result, [1, 2, 3]);
+   * ```
+   */
   async *iterate(): AsyncIterableIterator<T> {
-    while (this.iteratorCount > 0) {
+    while (this.#iteratorCount > 0) {
       // Sleep until any of the wrapped iterators yields.
-      await this.signal;
+      await this.#signal.promise;
 
       // Note that while we're looping over `yields`, new items may be added.
-      for (let i = 0; i < this.yields.length; i++) {
-        const { iterator, value } = this.yields[i];
+      for (const { iterator, value } of this.#yields) {
         yield value;
-        this.callIteratorNext(iterator);
+        this.#callIteratorNext(iterator);
       }
 
-      if (this.throws.length) {
-        for (const e of this.throws) {
+      if (this.#throws.length) {
+        for (const e of this.#throws) {
           throw e;
         }
-        this.throws.length = 0;
       }
       // Clear the `yields` list and reset the `signal` promise.
-      this.yields.length = 0;
-      this.signal = deferred();
+      this.#yields.length = 0;
+      this.#signal = Promise.withResolvers<void>();
     }
   }
 
+  /**
+   * Implements an async iterator for the stream.
+   * @returns the async iterator for all the added async iterables.
+   *
+   * @example Usage
+   * ```ts
+   * import { MuxAsyncIterator } from "@std/async/mux-async-iterator";
+   * import { assertEquals } from "@std/assert";
+   *
+   * async function* gen123(): AsyncIterableIterator<number> {
+   *   yield 1;
+   *   yield 2;
+   *   yield 3;
+   * }
+   *
+   * const mux = new MuxAsyncIterator<number>();
+   * mux.add(gen123());
+   *
+   * const result = await Array.fromAsync(mux);
+   *
+   * assertEquals(result, [1, 2, 3]);
+   * ```
+   */
   [Symbol.asyncIterator](): AsyncIterator<T> {
     return this.iterate();
   }

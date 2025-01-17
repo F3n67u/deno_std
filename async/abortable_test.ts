@@ -1,108 +1,208 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import { assertEquals, assertRejects } from "../testing/asserts.ts";
-import { deferred } from "./deferred.ts";
+// Copyright 2018-2025 the Deno authors. MIT license.
+import { assertEquals, assertRejects } from "@std/assert";
 import { abortable } from "./abortable.ts";
 
-Deno.test("[async] abortable (Promise)", async () => {
+Deno.test("abortable() handles promise", async () => {
   const c = new AbortController();
-  const p = deferred();
-  const t = setTimeout(() => p.resolve("Hello"), 100);
-  const result = await abortable(p, c.signal);
+  const { promise, resolve } = Promise.withResolvers<string>();
+  const t = setTimeout(() => resolve("Hello"), 100);
+  const result = await abortable(promise, c.signal);
   assertEquals(result, "Hello");
   clearTimeout(t);
 });
 
-Deno.test("[async] abortable (Promise) with signal aborted after delay", async () => {
+Deno.test("abortable() handles promise with aborted signal after delay", async () => {
   const c = new AbortController();
-  const p = deferred();
-  const t = setTimeout(() => p.resolve("Hello"), 100);
+  const { promise, resolve } = Promise.withResolvers<string>();
+  const t = setTimeout(() => resolve("Hello"), 100);
   setTimeout(() => c.abort(), 50);
-  await assertRejects(
-    async () => {
-      await abortable(p, c.signal);
-    },
+  const error = await assertRejects(
+    () => abortable(promise, c.signal),
     DOMException,
-    "AbortError",
+    "The signal has been aborted",
+  );
+  assertEquals(error.name, "AbortError");
+  clearTimeout(t);
+});
+
+Deno.test("abortable() handles promise with aborted signal after delay with reason", async () => {
+  const c = new AbortController();
+  const { promise, resolve } = Promise.withResolvers<string>();
+  const t = setTimeout(() => resolve("Hello"), 100);
+  setTimeout(() => c.abort(new Error("This is my reason")), 50);
+  await assertRejects(
+    () => abortable(promise, c.signal),
+    Error,
+    "This is my reason",
   );
   clearTimeout(t);
 });
 
-Deno.test("[async] abortable (Promise) with already aborted signal", async () => {
+Deno.test("abortable() handles promise with already aborted signal", async () => {
   const c = new AbortController();
-  const p = deferred();
-  const t = setTimeout(() => p.resolve("Hello"), 100);
+  const { promise, resolve } = Promise.withResolvers<string>();
+  const t = setTimeout(() => resolve("Hello"), 100);
   c.abort();
-  await assertRejects(
+  const error = await assertRejects(
     async () => {
-      await abortable(p, c.signal);
+      await abortable(promise, c.signal);
     },
     DOMException,
-    "AbortError",
+    "The signal has been aborted",
+  );
+  assertEquals(error.name, "AbortError");
+  clearTimeout(t);
+});
+
+Deno.test("abortable() handles promise with already aborted signal with reason", async () => {
+  const c = new AbortController();
+  const { promise, resolve } = Promise.withResolvers<string>();
+  const t = setTimeout(() => resolve("Hello"), 100);
+  c.abort(new Error("This is my reason"));
+  await assertRejects(
+    () => abortable(promise, c.signal),
+    Error,
+    "This is my reason",
   );
   clearTimeout(t);
 });
 
-Deno.test("[async] abortable (AsyncIterable)", async () => {
+Deno.test("abortable.AsyncIterable()", async () => {
   const c = new AbortController();
-  const p = deferred();
-  const t = setTimeout(() => p.resolve("Hello"), 100);
+  const { promise, resolve } = Promise.withResolvers<string>();
+  const t = setTimeout(() => resolve("Hello"), 100);
   const a = async function* () {
     yield "Hello";
-    await p;
+    await promise;
     yield "World";
   };
-  const items: string[] = [];
-  for await (const item of abortable(a(), c.signal)) {
-    items.push(item);
-  }
+  const items = await Array.fromAsync(abortable(a(), c.signal));
   assertEquals(items, ["Hello", "World"]);
   clearTimeout(t);
 });
 
-Deno.test("[async] abortable (AsyncIterable) with signal aborted after delay", async () => {
+Deno.test("abortable.AsyncIterable() handles aborted signal after delay", async () => {
   const c = new AbortController();
-  const p = deferred();
-  const t = setTimeout(() => p.resolve("Hello"), 100);
+  const { promise, resolve } = Promise.withResolvers<string>();
+  const t = setTimeout(() => resolve("Hello"), 100);
   const a = async function* () {
     yield "Hello";
-    await p;
+    await promise;
     yield "World";
   };
   setTimeout(() => c.abort(), 50);
   const items: string[] = [];
-  await assertRejects(
+  const error = await assertRejects(
     async () => {
       for await (const item of abortable(a(), c.signal)) {
         items.push(item);
       }
     },
     DOMException,
-    "AbortError",
+    "The signal has been aborted",
   );
+  assertEquals(error.name, "AbortError");
   assertEquals(items, ["Hello"]);
   clearTimeout(t);
 });
 
-Deno.test("[async] abortable (AsyncIterable) with already aborted signal", async () => {
+Deno.test("abortable.AsyncIterable() handles already aborted signal", async () => {
   const c = new AbortController();
-  const p = deferred();
-  const t = setTimeout(() => p.resolve("Hello"), 100);
+  const { promise, resolve } = Promise.withResolvers<string>();
+  const t = setTimeout(() => resolve("Hello"), 100);
   const a = async function* () {
     yield "Hello";
-    await p;
+    await promise;
     yield "World";
   };
   c.abort();
   const items: string[] = [];
-  await assertRejects(
+  const error = await assertRejects(
     async () => {
       for await (const item of abortable(a(), c.signal)) {
         items.push(item);
       }
     },
     DOMException,
-    "AbortError",
+    "The signal has been aborted",
   );
+  assertEquals(error.name, "AbortError");
   assertEquals(items, []);
   clearTimeout(t);
+});
+
+Deno.test("abortable.AsyncIterable() calls return before throwing", async () => {
+  const c = new AbortController();
+  let returnCalled = false;
+  let timeoutId: number;
+  const iterable: AsyncIterable<string> = {
+    [Symbol.asyncIterator]: () => ({
+      next: () =>
+        new Promise((resolve) => {
+          timeoutId = setTimeout(
+            () => resolve({ value: "Hello", done: false }),
+            1,
+          );
+        }),
+      return: () => {
+        returnCalled = true;
+        return Promise.resolve({ value: undefined, done: true });
+      },
+    }),
+  };
+  setTimeout(() => c.abort(), 1);
+  const items: string[] = [];
+  const error = await assertRejects(
+    async () => {
+      for await (const item of abortable(iterable, c.signal)) {
+        items.push(item);
+      }
+    },
+    DOMException,
+    "The signal has been aborted",
+  );
+  assertEquals(returnCalled, true);
+  assertEquals(error.name, "AbortError");
+  assertEquals(items, []);
+  clearTimeout(timeoutId!);
+});
+
+Deno.test("abortable.AsyncIterable() behaves just like original when not aborted", async () => {
+  async function* gen() {
+    yield 1;
+    yield await Promise.resolve(2);
+    yield 3;
+    return 4;
+  }
+  const normalIterator = gen();
+  const abortController = new AbortController();
+  const abortableIterator = abortable(gen(), abortController.signal);
+
+  assertEquals(await abortableIterator.next(), await normalIterator.next());
+  assertEquals(await abortableIterator.next(), await normalIterator.next());
+  assertEquals(await abortableIterator.next(), await normalIterator.next());
+  assertEquals(await abortableIterator.next(), await normalIterator.next());
+  assertEquals(await abortableIterator.next(), await normalIterator.next());
+});
+
+Deno.test("abortable.AsyncIterable() behaves just like original when return is called", async () => {
+  async function* gen() {
+    yield 1;
+    yield await Promise.resolve(2);
+    yield 3;
+    return 4;
+  }
+  const normalIterator = gen();
+  const abortController = new AbortController();
+  const abortableIterator = abortable(gen(), abortController.signal);
+
+  assertEquals(
+    await abortableIterator.next(123),
+    await normalIterator.next(123),
+  );
+  assertEquals(
+    await abortableIterator.return(321),
+    await normalIterator.return(321),
+  );
+  assertEquals(await abortableIterator.next(), await normalIterator.next());
 });

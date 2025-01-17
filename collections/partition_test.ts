@@ -1,6 +1,6 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 
-import { assertEquals } from "../testing/asserts.ts";
+import { assertEquals } from "@std/assert";
 import { partition } from "./partition.ts";
 
 function partitionTest<I>(
@@ -13,7 +13,7 @@ function partitionTest<I>(
 }
 
 Deno.test({
-  name: "[collections/partition] no mutation",
+  name: "partition() handles no mutation",
   fn() {
     const array = [1, 2, 3];
     partition(array, (it) => it % 2 === 0);
@@ -23,7 +23,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/partition] empty input",
+  name: "partition() handles empty input",
   fn() {
     partitionTest(
       [[], () => true],
@@ -33,7 +33,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/partition] all match",
+  name: "partition() handles all match",
   fn() {
     partitionTest(
       [[2, 4, 6], (it) => it % 2 === 0],
@@ -47,7 +47,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/partition] none match",
+  name: "partition() handles none match",
   fn() {
     partitionTest(
       [[3, 7, 5], (it) => it % 2 === 0],
@@ -61,7 +61,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/partition] some match",
+  name: "partition() handles some match",
   fn() {
     partitionTest(
       [[13, 4, 13, 8], (it) => it % 2 === 0],

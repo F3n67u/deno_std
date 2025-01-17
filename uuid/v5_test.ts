@@ -1,16 +1,16 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import { assert, assertEquals } from "../testing/asserts.ts";
+// Copyright 2018-2025 the Deno authors. MIT license.
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { generate, validate } from "./v5.ts";
 
 const NAMESPACE = "1b671a64-40d5-491e-99b0-da01ff1f3341";
 
-Deno.test("[UUID] test_uuid_v5", async () => {
+Deno.test("generate() generates a non-empty string", async () => {
   const u = await generate(NAMESPACE, new Uint8Array());
   assertEquals(typeof u, "string", "returns a string");
   assert(u !== "", "return string is not empty");
 });
 
-Deno.test("[UUID] test_uuid_v5_format", async () => {
+Deno.test("generate() generates UUIDs in version 5 format", async () => {
   for (let i = 0; i < 10000; i++) {
     const u = await generate(
       NAMESPACE,
@@ -20,12 +20,12 @@ Deno.test("[UUID] test_uuid_v5_format", async () => {
   }
 });
 
-Deno.test("[UUID] test_uuid_v5_option", async () => {
+Deno.test("generate() generates a name-based UUID using SHA-1 hash", async () => {
   const u = await generate(NAMESPACE, new TextEncoder().encode("Hello, World"));
   assertEquals(u, "4b4f2adc-5b27-57b5-8e3a-c4c4bcf94f05");
 });
 
-Deno.test("[UUID] is_valid_uuid_v5", async () => {
+Deno.test("validate() checks if a string is a valid v5 UUID", async () => {
   const u = await generate(
     "1b671a64-40d5-491e-99b0-da01ff1f3341",
     new TextEncoder().encode("Hello, World"),
@@ -36,4 +36,18 @@ Deno.test("[UUID] is_valid_uuid_v5", async () => {
   assert(validate(u), `generated ${u} should be valid`);
   assert(validate(t), `${t} should be valid`);
   assert(!validate(n), `${n} should not be valid`);
+});
+
+Deno.test("generate() throws on invalid namespace", async () => {
+  await assertRejects(
+    async () => await generate("invalid-uuid", new Uint8Array()),
+    TypeError,
+    "Cannot generate UUID: invalid namespace invalid-uuid",
+  );
+  await assertRejects(
+    async () =>
+      await generate("1b671a64-40d5-491e-99b0-da01ff1f334Z", new Uint8Array()),
+    TypeError,
+    "Cannot generate UUID: invalid namespace 1b671a64-40d5-491e-99b0-da01ff1f334Z",
+  );
 });

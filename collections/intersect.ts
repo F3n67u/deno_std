@@ -1,33 +1,35 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
-import { filterInPlace } from "./_utils.ts";
-
 /**
- * Returns all distinct elements that appear at least once in each of the given arrays
+ * Returns all distinct elements that appear at least once in each of the given
+ * arrays.
  *
- * Example:
+ * @typeParam T The type of the elements in the input arrays.
  *
+ * @param arrays The arrays to intersect.
+ *
+ * @returns An array of distinct elements that appear at least once in each of
+ * the given arrays.
+ *
+ * @example Basic usage
  * ```ts
- * import { intersect } from "https://deno.land/std@$STD_VERSION/collections/mod.ts";
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts";
+ * import { intersect } from "@std/collections/intersect";
+ * import { assertEquals } from "@std/assert";
  *
- * const lisaInterests = [ 'Cooking', 'Music', 'Hiking' ]
- * const kimInterests = [ 'Music', 'Tennis', 'Cooking' ]
- * const commonInterests = intersect(lisaInterests, kimInterests)
+ * const lisaInterests = ["Cooking", "Music", "Hiking"];
+ * const kimInterests = ["Music", "Tennis", "Cooking"];
+ * const commonInterests = intersect(lisaInterests, kimInterests);
  *
- * assertEquals(commonInterests, [ 'Cooking', 'Music' ])
+ * assertEquals(commonInterests, ["Cooking", "Music"]);
  * ```
  */
 export function intersect<T>(...arrays: (readonly T[])[]): T[] {
-  const [originalHead, ...tail] = arrays;
-  const head = [...new Set(originalHead)];
-  const tailSets = tail.map((it) => new Set(it));
-
-  for (const set of tailSets) {
-    filterInPlace(head, (it) => set.has(it));
-    if (head.length === 0) return head;
+  const [array, ...otherArrays] = arrays;
+  let set = new Set(array);
+  for (const array of otherArrays) {
+    set = set.intersection(new Set(array));
+    if (set.size === 0) break;
   }
-
-  return head;
+  return [...set];
 }

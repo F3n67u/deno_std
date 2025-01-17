@@ -1,23 +1,29 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
- * Returns all distinct elements that appear in any of the given arrays
+ * Returns all distinct elements that appear in any of the given arrays.
  *
- * Example:
+ * @typeParam T The type of the array elements.
  *
+ * @param arrays The arrays to get the union of.
+ *
+ * @returns A new array containing all distinct elements from the given arrays.
+ *
+ * @example Basic usage
  * ```ts
- * import { union } from "https://deno.land/std@$STD_VERSION/collections/mod.ts";
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts";
+ * import { union } from "@std/collections/union";
+ * import { assertEquals } from "@std/assert";
  *
- * const soupIngredients = [ 'Pepper', 'Carrots', 'Leek' ]
- * const saladIngredients = [ 'Carrots', 'Radicchio', 'Pepper' ]
- * const shoppingList = union(soupIngredients, saladIngredients)
+ * const soupIngredients = ["Pepper", "Carrots", "Leek"];
+ * const saladIngredients = ["Carrots", "Radicchio", "Pepper"];
  *
- * assertEquals(shoppingList, [ 'Pepper', 'Carrots', 'Leek', 'Radicchio' ])
+ * const shoppingList = union(soupIngredients, saladIngredients);
+ *
+ * assertEquals(shoppingList, ["Pepper", "Carrots", "Leek", "Radicchio"]);
  * ```
  */
-export function union<T>(...arrays: (readonly T[])[]): T[] {
+export function union<T>(...arrays: Iterable<T>[]): T[] {
   const set = new Set<T>();
 
   for (const array of arrays) {

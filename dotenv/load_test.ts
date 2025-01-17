@@ -1,56 +1,54 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import { assertEquals } from "../testing/asserts.ts";
-import * as path from "../path/mod.ts";
+// Copyright 2018-2025 the Deno authors. MIT license.
+import { assertEquals } from "@std/assert";
+import * as path from "@std/path";
 
 const moduleDir = path.dirname(path.fromFileUrl(import.meta.url));
 const testdataDir = path.resolve(moduleDir, "testdata");
 
 Deno.test({
-  name: "load",
+  name: "load()",
   async fn() {
-    const p = Deno.run({
-      cmd: [
-        Deno.execPath(),
+    const command = new Deno.Command(Deno.execPath(), {
+      args: [
         "run",
         "--allow-read",
         "--allow-env",
+        "--no-lock",
         path.join(testdataDir, "./app_load.ts"),
       ],
+      clearEnv: true,
       cwd: testdataDir,
-      stdout: "piped",
     });
+    const { stdout } = await command.output();
 
     const decoder = new TextDecoder();
-    const rawOutput = await p.output();
     assertEquals(
-      decoder.decode(rawOutput).trim(),
+      decoder.decode(stdout).trim(),
       "hello world",
     );
-    p.close();
   },
 });
 
 Deno.test({
-  name: "load when multiple files",
+  name: "load() works as expected when the multiple files are imported",
   async fn() {
-    const p = Deno.run({
-      cmd: [
-        Deno.execPath(),
+    const command = new Deno.Command(Deno.execPath(), {
+      args: [
         "run",
+        "--no-lock",
         "--allow-read",
         "--allow-env",
         path.join(testdataDir, "./app_load_parent.ts"),
       ],
+      clearEnv: true,
       cwd: testdataDir,
-      stdout: "piped",
     });
+    const { stdout } = await command.output();
 
     const decoder = new TextDecoder();
-    const rawOutput = await p.output();
     assertEquals(
-      decoder.decode(rawOutput).trim(),
+      decoder.decode(stdout).trim(),
       "hello world",
     );
-    p.close();
   },
 });

@@ -1,10 +1,17 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import { assertEquals } from "../testing/asserts.ts";
-import * as path from "./mod.ts";
+// Copyright 2018-2025 the Deno authors. MIT license.
+import { assertEquals } from "@std/assert";
+import * as posix from "./posix/mod.ts";
+import * as windows from "./windows/mod.ts";
+import { join } from "./join.ts";
+import { join as posixUnstableJoin } from "./posix/unstable_join.ts";
+import { join as windowsUnstableJoin } from "./windows/unstable_join.ts";
 
 const backslashRE = /\\/g;
 
-const joinTests =
+type TestCase = [string[], string];
+type UrlTestCase = [[URL, ...string[]], string];
+
+const joinTests: TestCase[] =
   // arguments                     result
   [
     [[".", "x/b", "..", "/b/c.js"], "x/b/c.js"],
@@ -56,8 +63,18 @@ const joinTests =
     [["", "/", "/foo"], "/foo"],
   ];
 
+const joinUrlTests: UrlTestCase[] = [
+  // URLs
+  [[new URL("file:///"), "x/b", "..", "/b/c.js"], "/x/b/c.js"],
+  [[new URL("file:///foo"), "../../../bar"], "/bar"],
+  [
+    [new URL("file:///foo"), "bar", "baz/asdf", "quux", ".."],
+    "/foo/bar/baz/asdf",
+  ],
+];
+
 // Windows-specific join tests
-const windowsJoinTests = [
+const windowsJoinTests: TestCase[] = [
   // arguments                     result
   // UNC path expected
   [["//foo/bar"], "\\\\foo\\bar\\"],
@@ -105,24 +122,63 @@ const windowsJoinTests = [
   [["c:", "/"], "c:\\"],
   [["c:", "file"], "c:\\file"],
 ];
+const windowsJoinUrlTests: UrlTestCase[] = [
+  // URLs
+  [[new URL("file:///c:")], "c:\\"],
+  [[new URL("file:///c:"), "file"], "c:\\file"],
+  [[new URL("file:///c:/"), "file"], "c:\\file"],
+];
 
-Deno.test("join", function () {
+Deno.test("posix.join()", function () {
   joinTests.forEach(function (p) {
-    const _p = p[0] as string[];
-    const actual = path.posix.join.apply(null, _p);
+    const _p = p[0];
+    const actual = posix.join.apply(null, _p);
     assertEquals(actual, p[1]);
   });
 });
 
-Deno.test("joinWin32", function () {
+Deno.test("posix.(unstable-)join()", function () {
+  joinUrlTests.forEach(function (p) {
+    const _p = p[0];
+    const actual = posixUnstableJoin.apply(null, _p);
+    assertEquals(actual, p[1]);
+  });
+});
+
+Deno.test("windows.join()", function () {
   joinTests.forEach(function (p) {
-    const _p = p[0] as string[];
-    const actual = path.win32.join.apply(null, _p).replace(backslashRE, "/");
+    const _p = p[0];
+    const actual = windows.join.apply(null, _p).replace(backslashRE, "/");
     assertEquals(actual, p[1]);
   });
   windowsJoinTests.forEach(function (p) {
-    const _p = p[0] as string[];
-    const actual = path.win32.join.apply(null, _p);
+    const _p = p[0];
+    const actual = windows.join.apply(null, _p);
     assertEquals(actual, p[1]);
   });
+});
+
+Deno.test("windows.(unstable-)join()", function () {
+  joinUrlTests.forEach(function (p) {
+    const _p = p[0];
+    const actual = windowsUnstableJoin.apply(null, _p).replace(
+      backslashRE,
+      "/",
+    );
+    assertEquals(actual, p[1]);
+  });
+  windowsJoinUrlTests.forEach(function (p) {
+    const _p = p[0];
+    const actual = windowsUnstableJoin.apply(null, _p);
+    assertEquals(actual, p[1]);
+  });
+});
+
+Deno.test(`join() returns "." if input is empty`, function () {
+  assertEquals(join(""), ".");
+  assertEquals(join("", ""), ".");
+
+  const pwd = Deno.cwd();
+  assertEquals(join(pwd), pwd);
+  assertEquals(join(pwd, ""), pwd);
 });

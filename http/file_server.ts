@@ -1,18 +1,60 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 
 // This program serves files in the current directory over HTTP.
 // TODO(bartlomieju): Add tests like these:
 // https://github.com/indexzero/http-server/blob/master/test/http-server-test.js
 
-import { extname, posix } from "../path/mod.ts";
-import { serve, serveTls } from "./server.ts";
-import { Status, STATUS_TEXT } from "./http_status.ts";
-import { parse } from "../flags/mod.ts";
-import { assert } from "../_util/assert.ts";
-import { red } from "../fmt/colors.ts";
+/**
+ * Contains functions {@linkcode serveDir} and {@linkcode serveFile} for
+ * building a static file server.
+ *
+ * This module can also be used as a CLI. If you want to run it directly:
+ *
+ * ```shell
+ * > # start server
+ * > deno run --allow-net --allow-read --allow-sys jsr:@std/http/file-server
+ * > # show help
+ * > deno run jsr:@std/http/file-server --help
+ * ```
+ *
+ * If you want to install and run:
+ *
+ * ```shell
+ * > # install
+ * > deno install --allow-net --allow-read --allow-sys --global jsr:@std/http/file-server
+ * > # start server
+ * > file-server
+ * > # show help
+ * > file-server --help
+ * ```
+ *
+ * @module
+ */
 
-const DEFAULT_CHUNK_SIZE = 16_640;
+import { join as posixJoin } from "@std/path/posix/join";
+import { normalize as posixNormalize } from "@std/path/posix/normalize";
+import { extname } from "@std/path/extname";
+import { join } from "@std/path/join";
+import { relative } from "@std/path/relative";
+import { resolve } from "@std/path/resolve";
+import { SEPARATOR_PATTERN } from "@std/path/constants";
+import { contentType } from "@std/media-types/content-type";
+import { eTag, ifNoneMatch } from "./etag.ts";
+import {
+  isRedirectStatus,
+  STATUS_CODE,
+  STATUS_TEXT,
+  type StatusCode,
+} from "./status.ts";
+import { ByteSliceStream } from "@std/streams/byte-slice-stream";
+import { parseArgs } from "@std/cli/parse-args";
+import denoConfig from "./deno.json" with { type: "json" };
+import { format as formatBytes } from "@std/fmt/bytes";
+import { getNetworkAddress } from "@std/net/unstable-get-network-address";
+import { escape } from "@std/html/entities";
+import { HEADER } from "./unstable_header.ts";
+import { METHOD } from "./unstable_method.ts";
 
 interface EntryInfo {
   mode: string;
@@ -21,174 +63,18 @@ interface EntryInfo {
   name: string;
 }
 
-interface FileServerArgs {
-  _: string[];
-  // -p --port
-  port: string;
-  // --cors
-  cors: boolean;
-  // --no-dir-listing
-  "dir-listing": boolean;
-  dotfiles: boolean;
-  // --host
-  host: string;
-  // -c --cert
-  cert: string;
-  // -k --key
-  key: string;
-  // -h --help
-  help: boolean;
-  // --quiet
-  quiet: boolean;
-}
-
-const encoder = new TextEncoder();
-
-const MEDIA_TYPES: Record<string, string> = {
-  ".md": "text/markdown",
-  ".html": "text/html",
-  ".htm": "text/html",
-  ".json": "application/json",
-  ".map": "application/json",
-  ".txt": "text/plain",
-  ".ts": "text/typescript",
-  ".tsx": "text/tsx",
-  ".js": "application/javascript",
-  ".jsx": "text/jsx",
-  ".gz": "application/gzip",
-  ".css": "text/css",
-  ".wasm": "application/wasm",
-  ".mjs": "application/javascript",
-  ".otf": "font/otf",
-  ".ttf": "font/ttf",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".conf": "text/plain",
-  ".list": "text/plain",
-  ".log": "text/plain",
-  ".ini": "text/plain",
-  ".vtt": "text/vtt",
-  ".yaml": "text/yaml",
-  ".yml": "text/yaml",
-  ".mid": "audio/midi",
-  ".midi": "audio/midi",
-  ".mp3": "audio/mp3",
-  ".mp4a": "audio/mp4",
-  ".m4a": "audio/mp4",
-  ".ogg": "audio/ogg",
-  ".spx": "audio/ogg",
-  ".opus": "audio/ogg",
-  ".wav": "audio/wav",
-  ".webm": "audio/webm",
-  ".aac": "audio/x-aac",
-  ".flac": "audio/x-flac",
-  ".mp4": "video/mp4",
-  ".mp4v": "video/mp4",
-  ".mkv": "video/x-matroska",
-  ".mov": "video/quicktime",
-  ".svg": "image/svg+xml",
-  ".avif": "image/avif",
-  ".bmp": "image/bmp",
-  ".gif": "image/gif",
-  ".heic": "image/heic",
-  ".heif": "image/heif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".png": "image/png",
-  ".tiff": "image/tiff",
-  ".psd": "image/vnd.adobe.photoshop",
-  ".ico": "image/vnd.microsoft.icon",
-  ".webp": "image/webp",
-  ".es": "application/ecmascript",
-  ".epub": "application/epub+zip",
-  ".jar": "application/java-archive",
-  ".war": "application/java-archive",
-  ".webmanifest": "application/manifest+json",
-  ".doc": "application/msword",
-  ".dot": "application/msword",
-  ".docx":
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ".dotx":
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
-  ".cjs": "application/node",
-  ".bin": "application/octet-stream",
-  ".pkg": "application/octet-stream",
-  ".dump": "application/octet-stream",
-  ".exe": "application/octet-stream",
-  ".deploy": "application/octet-stream",
-  ".img": "application/octet-stream",
-  ".msi": "application/octet-stream",
-  ".pdf": "application/pdf",
-  ".pgp": "application/pgp-encrypted",
-  ".asc": "application/pgp-signature",
-  ".sig": "application/pgp-signature",
-  ".ai": "application/postscript",
-  ".eps": "application/postscript",
-  ".ps": "application/postscript",
-  ".rdf": "application/rdf+xml",
-  ".rss": "application/rss+xml",
-  ".rtf": "application/rtf",
-  ".apk": "application/vnd.android.package-archive",
-  ".key": "application/vnd.apple.keynote",
-  ".numbers": "application/vnd.apple.keynote",
-  ".pages": "application/vnd.apple.pages",
-  ".geo": "application/vnd.dynageo",
-  ".gdoc": "application/vnd.google-apps.document",
-  ".gslides": "application/vnd.google-apps.presentation",
-  ".gsheet": "application/vnd.google-apps.spreadsheet",
-  ".kml": "application/vnd.google-earth.kml+xml",
-  ".mkz": "application/vnd.google-earth.kmz",
-  ".icc": "application/vnd.iccprofile",
-  ".icm": "application/vnd.iccprofile",
-  ".xls": "application/vnd.ms-excel",
-  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ".xlm": "application/vnd.ms-excel",
-  ".ppt": "application/vnd.ms-powerpoint",
-  ".pot": "application/vnd.ms-powerpoint",
-  ".pptx":
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  ".potx":
-    "application/vnd.openxmlformats-officedocument.presentationml.template",
-  ".xps": "application/vnd.ms-xpsdocument",
-  ".odc": "application/vnd.oasis.opendocument.chart",
-  ".odb": "application/vnd.oasis.opendocument.database",
-  ".odf": "application/vnd.oasis.opendocument.formula",
-  ".odg": "application/vnd.oasis.opendocument.graphics",
-  ".odp": "application/vnd.oasis.opendocument.presentation",
-  ".ods": "application/vnd.oasis.opendocument.spreadsheet",
-  ".odt": "application/vnd.oasis.opendocument.text",
-  ".rar": "application/vnd.rar",
-  ".unityweb": "application/vnd.unity",
-  ".dmg": "application/x-apple-diskimage",
-  ".bz": "application/x-bzip",
-  ".crx": "application/x-chrome-extension",
-  ".deb": "application/x-debian-package",
-  ".php": "application/x-httpd-php",
-  ".iso": "application/x-iso9660-image",
-  ".sh": "application/x-sh",
-  ".sql": "application/x-sql",
-  ".srt": "application/x-subrip",
-  ".xml": "application/xml",
-  ".zip": "application/zip",
-};
-
-/** Returns the content-type based on the extension of a path. */
-function contentType(path: string): string | undefined {
-  return MEDIA_TYPES[extname(path)];
-}
-
-// Generates a SHA-1 hash for the provided string
-async function createEtagHash(message: string) {
-  const byteToHex = (b: number) => b.toString(16).padStart(2, "00");
-  const hashType = "SHA-1"; // Faster, and this isn't a security sensitive cryptographic use case
-
-  // see: https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest
-  const msgUint8 = encoder.encode(message);
-  const hashBuffer = await crypto.subtle.digest(hashType, msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(byteToHex).join("");
-  return hashHex;
-}
+const ENV_PERM_STATUS =
+  Deno.permissions.querySync?.({ name: "env", variable: "DENO_DEPLOYMENT_ID" })
+    .state ?? "granted"; // for deno deploy
+const NET_PERM_STATUS =
+  Deno.permissions.querySync?.({ name: "sys", kind: "networkInterfaces" })
+    .state ?? "granted"; // for deno deploy
+const DENO_DEPLOYMENT_ID = ENV_PERM_STATUS === "granted"
+  ? Deno.env.get("DENO_DEPLOYMENT_ID")
+  : undefined;
+const HASHED_DENO_DEPLOYMENT_ID = DENO_DEPLOYMENT_ID
+  ? eTag(DENO_DEPLOYMENT_ID, { weak: true })
+  : undefined;
 
 function modeToString(isDir: boolean, maybeMode: number | null): string {
   const modeMap = ["---", "--x", "-w-", "-wx", "r--", "r-x", "rw-", "rwx"];
@@ -196,277 +82,357 @@ function modeToString(isDir: boolean, maybeMode: number | null): string {
   if (maybeMode === null) {
     return "(unknown mode)";
   }
-  const mode = maybeMode.toString(8);
-  if (mode.length < 3) {
-    return "(unknown mode)";
-  }
+  const mode = maybeMode.toString(8).padStart(3, "0");
   let output = "";
   mode
     .split("")
     .reverse()
     .slice(0, 3)
-    .forEach((v): void => {
+    .forEach((v) => {
       output = `${modeMap[+v]} ${output}`;
     });
   output = `${isDir ? "d" : "-"} ${output}`;
   return output;
 }
 
-function fileLenToString(len: number): string {
-  const multiplier = 1024;
-  let base = 1;
-  const suffix = ["B", "K", "M", "G", "T"];
-  let suffixIndex = 0;
-
-  while (base * multiplier < len) {
-    if (suffixIndex >= suffix.length - 1) {
-      break;
-    }
-    base *= multiplier;
-    suffixIndex++;
-  }
-
-  return `${(len / base).toFixed(2)}${suffix[suffixIndex]}`;
+function createStandardResponse(status: StatusCode, init?: ResponseInit) {
+  const statusText = STATUS_TEXT[status];
+  return new Response(statusText, { status, statusText, ...init });
 }
 
 /**
- * Returns an HTTP Response with the requested file as the body.
+ * parse range header.
+ *
+ * ```ts ignore
+ * parseRangeHeader("bytes=0-100",   500); // => { start: 0, end: 100 }
+ * parseRangeHeader("bytes=0-",      500); // => { start: 0, end: 499 }
+ * parseRangeHeader("bytes=-100",    500); // => { start: 400, end: 499 }
+ * parseRangeHeader("bytes=invalid", 500); // => null
+ * ```
+ *
+ * Note: Currently, no support for multiple Ranges (e.g. `bytes=0-10, 20-30`)
+ */
+function parseRangeHeader(rangeValue: string, fileSize: number) {
+  const rangeRegex = /bytes=(?<start>\d+)?-(?<end>\d+)?$/u;
+  const parsed = rangeValue.match(rangeRegex);
+
+  if (!parsed || !parsed.groups) {
+    // failed to parse range header
+    return null;
+  }
+
+  const { start, end } = parsed.groups;
+  if (start !== undefined) {
+    if (end !== undefined) {
+      return { start: +start, end: +end };
+    } else {
+      return { start: +start, end: fileSize - 1 };
+    }
+  } else {
+    if (end !== undefined) {
+      // example: `bytes=-100` means the last 100 bytes.
+      return { start: fileSize - +end, end: fileSize - 1 };
+    } else {
+      // failed to parse range header
+      return null;
+    }
+  }
+}
+
+/** Options for {@linkcode serveFile}. */
+export interface ServeFileOptions {
+  /**
+   * The algorithm to use for generating the ETag.
+   *
+   * @default {"SHA-256"}
+   */
+  etagAlgorithm?: AlgorithmIdentifier;
+  /**
+   * An optional object returned by {@linkcode Deno.stat}. It is used for
+   * optimization purposes.
+   *
+   * Defaults to the result of calling {@linkcode Deno.stat} with the provided
+   * `filePath`.
+   */
+  fileInfo?: Deno.FileInfo;
+}
+
+/**
+ * Resolves a {@linkcode Response} with the requested file as the body.
+ *
+ * @example Usage
+ * ```ts ignore
+ * import { serveFile } from "@std/http/file-server";
+ *
+ * Deno.serve((req) => {
+ *   return serveFile(req, "README.md");
+ * });
+ * ```
+ *
  * @param req The server request context used to cleanup the file handle.
  * @param filePath Path of the file to serve.
+ * @param options Additional options.
+ * @returns A response for the request.
  */
 export async function serveFile(
   req: Request,
   filePath: string,
+  options?: ServeFileOptions,
 ): Promise<Response> {
-  const [file, fileInfo] = await Promise.all([
-    Deno.open(filePath),
-    Deno.stat(filePath),
-  ]);
-
-  const headers = setBaseHeaders();
-
-  // Set mime-type using the file extension in filePath
-  const contentTypeValue = contentType(filePath);
-  if (contentTypeValue) {
-    headers.set("content-type", contentTypeValue);
+  if (req.method !== METHOD.Get && req.method !== METHOD.Head) {
+    return createStandardResponse(STATUS_CODE.MethodNotAllowed);
   }
+
+  let { etagAlgorithm: algorithm = "SHA-256", fileInfo } = options ?? {};
+
+  try {
+    fileInfo ??= await Deno.stat(filePath);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      await req.body?.cancel();
+      return createStandardResponse(STATUS_CODE.NotFound);
+    } else {
+      throw error;
+    }
+  }
+
+  if (fileInfo.isDirectory) {
+    await req.body?.cancel();
+    return createStandardResponse(STATUS_CODE.NotFound);
+  }
+
+  const headers = createBaseHeaders();
 
   // Set date header if access timestamp is available
-  if (fileInfo.atime instanceof Date) {
-    const date = new Date(fileInfo.atime);
-    headers.set("date", date.toUTCString());
+  if (fileInfo.atime) {
+    headers.set(HEADER.Date, fileInfo.atime.toUTCString());
   }
 
-  // Set last modified header if access timestamp is available
-  if (fileInfo.mtime instanceof Date) {
-    const lastModified = new Date(fileInfo.mtime);
-    headers.set("last-modified", lastModified.toUTCString());
+  const etag = fileInfo.mtime
+    ? await eTag(fileInfo, { algorithm })
+    : await HASHED_DENO_DEPLOYMENT_ID;
 
-    // Create a simple etag that is an md5 of the last modified date and filesize concatenated
-    const simpleEtag = await createEtagHash(
-      `${lastModified.toJSON()}${fileInfo.size}`,
-    );
-    headers.set("etag", simpleEtag);
+  // Set last modified header if last modification timestamp is available
+  if (fileInfo.mtime) {
+    headers.set(HEADER.LastModified, fileInfo.mtime.toUTCString());
+  }
+  if (etag) {
+    headers.set(HEADER.ETag, etag);
+  }
 
+  // Set mime-type using the file extension in filePath
+  const contentTypeValue = contentType(extname(filePath));
+  if (contentTypeValue) {
+    headers.set(HEADER.ContentType, contentTypeValue);
+  }
+  const fileSize = fileInfo.size;
+
+  if (req.method === METHOD.Head) {
+    // Set content length
+    headers.set(HEADER.ContentLength, `${fileSize}`);
+
+    const status = STATUS_CODE.OK;
+    return new Response(null, {
+      status,
+      statusText: STATUS_TEXT[status],
+      headers,
+    });
+  }
+
+  if (etag || fileInfo.mtime) {
     // If a `if-none-match` header is present and the value matches the tag or
     // if a `if-modified-since` header is present and the value is bigger than
     // the access timestamp value, then return 304
-    const ifNoneMatch = req.headers.get("if-none-match");
-    const ifModifiedSince = req.headers.get("if-modified-since");
+    const ifNoneMatchValue = req.headers.get(HEADER.IfNoneMatch);
+    const ifModifiedSinceValue = req.headers.get(HEADER.IfModifiedSince);
     if (
-      (ifNoneMatch && ifNoneMatch === simpleEtag) ||
-      (ifNoneMatch === null &&
-        ifModifiedSince &&
-        fileInfo.mtime.getTime() < new Date(ifModifiedSince).getTime() + 1000)
+      (!ifNoneMatch(ifNoneMatchValue, etag)) ||
+      (ifNoneMatchValue === null &&
+        fileInfo.mtime &&
+        ifModifiedSinceValue &&
+        fileInfo.mtime.getTime() <
+          new Date(ifModifiedSinceValue).getTime() + 1000)
     ) {
-      const status = Status.NotModified;
-      const statusText = STATUS_TEXT.get(status);
-
-      file.close();
-
+      const status = STATUS_CODE.NotModified;
       return new Response(null, {
         status,
-        statusText,
+        statusText: STATUS_TEXT[status],
         headers,
       });
     }
   }
 
-  // Get and parse the "range" header
-  const range = req.headers.get("range") as string;
-  const rangeRe = /bytes=(\d+)-(\d+)?/;
-  const parsed = rangeRe.exec(range);
+  const rangeValue = req.headers.get(HEADER.Range);
 
-  // Use the parsed value if available, fallback to the start and end of the entire file
-  const start = parsed && parsed[1] ? +parsed[1] : 0;
-  const end = parsed && parsed[2] ? +parsed[2] : fileInfo.size - 1;
+  // handle range request
+  // Note: Some clients add a Range header to all requests to limit the size of the response.
+  // If the file is empty, ignore the range header and respond with a 200 rather than a 416.
+  // https://github.com/golang/go/blob/0d347544cbca0f42b160424f6bc2458ebcc7b3fc/src/net/http/fs.go#L273-L276
+  if (rangeValue && 0 < fileSize) {
+    const parsed = parseRangeHeader(rangeValue, fileSize);
 
-  let status = Status.OK;
+    // Returns 200 OK if parsing the range header fails
+    if (!parsed) {
+      // Set content length
+      headers.set(HEADER.ContentLength, `${fileSize}`);
 
-  // If there is a range, set the status to 206, and set the "Content-range" header.
-  if (range && parsed) {
-    status = Status.PartialContent;
-    headers.set("content-range", `bytes ${start}-${end}/${fileInfo.size}`);
-  }
+      const file = await Deno.open(filePath);
+      const status = STATUS_CODE.OK;
+      return new Response(file.readable, {
+        status,
+        statusText: STATUS_TEXT[status],
+        headers,
+      });
+    }
 
-  // Return 416 if `start` isn't less than or equal to `end`, or `start` or `end` are greater than the file's size
-  const maxRange = fileInfo.size - 1;
+    // Return 416 Range Not Satisfiable if invalid range header value
+    if (
+      parsed.end < 0 ||
+      parsed.end < parsed.start ||
+      fileSize <= parsed.start
+    ) {
+      // Set the "Content-range" header
+      headers.set(HEADER.ContentRange, `bytes */${fileSize}`);
 
-  if (
-    range &&
-    (!parsed ||
-      typeof start !== "number" ||
-      start > end ||
-      start > maxRange ||
-      end > maxRange)
-  ) {
-    const status = Status.RequestedRangeNotSatisfiable;
-    const statusText = STATUS_TEXT.get(status);
+      return createStandardResponse(
+        STATUS_CODE.RangeNotSatisfiable,
+        { headers },
+      );
+    }
 
-    file.close();
+    // clamps the range header value
+    const start = Math.max(0, parsed.start);
+    const end = Math.min(parsed.end, fileSize - 1);
 
-    return new Response(statusText, {
+    // Set the "Content-range" header
+    headers.set(HEADER.ContentRange, `bytes ${start}-${end}/${fileSize}`);
+
+    // Set content length
+    const contentLength = end - start + 1;
+    headers.set(HEADER.ContentLength, `${contentLength}`);
+
+    // Return 206 Partial Content
+    const file = await Deno.open(filePath);
+    await file.seek(start, Deno.SeekMode.Start);
+    const sliced = file.readable
+      .pipeThrough(new ByteSliceStream(0, contentLength - 1));
+    const status = STATUS_CODE.PartialContent;
+    return new Response(sliced, {
       status,
-      statusText,
+      statusText: STATUS_TEXT[status],
       headers,
     });
   }
 
   // Set content length
-  const contentLength = end - start + 1;
-  headers.set("content-length", `${contentLength}`);
+  headers.set(HEADER.ContentLength, `${fileSize}`);
 
-  // Create a stream of the file instead of loading it into memory
-  let bytesSent = 0;
-  const body = new ReadableStream({
-    async start() {
-      if (start > 0) {
-        await file.seek(start, Deno.SeekMode.Start);
-      }
-    },
-    async pull(controller) {
-      const bytes = new Uint8Array(DEFAULT_CHUNK_SIZE);
-      const bytesRead = await file.read(bytes);
-      if (bytesRead === null) {
-        file.close();
-        controller.close();
-        return;
-      }
-      controller.enqueue(
-        bytes.slice(0, Math.min(bytesRead, contentLength - bytesSent)),
-      );
-      bytesSent += bytesRead;
-      if (bytesSent > contentLength) {
-        file.close();
-        controller.close();
-      }
-    },
-  });
-
-  const statusText = STATUS_TEXT.get(status);
-
-  return new Response(body, {
+  const file = await Deno.open(filePath);
+  const status = STATUS_CODE.OK;
+  return new Response(file.readable, {
     status,
-    statusText,
+    statusText: STATUS_TEXT[status],
     headers,
   });
 }
 
-// TODO(bartlomieju): simplify this after deno.stat and deno.readDir are fixed
 async function serveDirIndex(
-  req: Request,
   dirPath: string,
   options: {
-    dotfiles: boolean;
+    showDotfiles: boolean;
     target: string;
+    urlRoot: string | undefined;
+    quiet: boolean | undefined;
   },
 ): Promise<Response> {
-  const showDotfiles = options.dotfiles;
-  const dirUrl = `/${posix.relative(options.target, dirPath)}`;
-  const listEntry: EntryInfo[] = [];
+  const { showDotfiles } = options;
+  const urlRoot = options.urlRoot ? "/" + options.urlRoot : "";
+  const dirUrl = `/${
+    relative(options.target, dirPath).replaceAll(
+      new RegExp(SEPARATOR_PATTERN, "g"),
+      "/",
+    )
+  }`;
+  const listEntryPromise: Promise<EntryInfo>[] = [];
 
   // if ".." makes sense
   if (dirUrl !== "/") {
-    const prevPath = posix.join(dirPath, "..");
-    const fileInfo = await Deno.stat(prevPath);
-    listEntry.push({
+    const prevPath = join(dirPath, "..");
+    const entryInfo = Deno.stat(prevPath).then((fileInfo): EntryInfo => ({
       mode: modeToString(true, fileInfo.mode),
       size: "",
       name: "../",
-      url: posix.join(dirUrl, ".."),
-    });
+      url: `${urlRoot}${posixJoin(dirUrl, "..")}`,
+    }));
+    listEntryPromise.push(entryInfo);
   }
 
+  // Read fileInfo in parallel
   for await (const entry of Deno.readDir(dirPath)) {
     if (!showDotfiles && entry.name[0] === ".") {
       continue;
     }
-    const filePath = posix.join(dirPath, entry.name);
-    const fileUrl = encodeURI(posix.join(dirUrl, entry.name));
-    if (entry.name === "index.html" && entry.isFile) {
-      // in case index.html as dir...
-      return serveFile(req, filePath);
-    }
-    const fileInfo = await Deno.stat(filePath);
-    listEntry.push({
-      mode: modeToString(entry.isDirectory, fileInfo.mode),
-      size: entry.isFile ? fileLenToString(fileInfo.size ?? 0) : "",
-      name: `${entry.name}${entry.isDirectory ? "/" : ""}`,
-      url: `${fileUrl}${entry.isDirectory ? "/" : ""}`,
-    });
+    const filePath = join(dirPath, entry.name);
+    const fileUrl = encodeURIComponent(posixJoin(dirUrl, entry.name))
+      .replaceAll("%2F", "/");
+
+    listEntryPromise.push((async () => {
+      try {
+        const fileInfo = await Deno.stat(filePath);
+        return {
+          mode: modeToString(entry.isDirectory, fileInfo.mode),
+          size: entry.isFile ? formatBytes(fileInfo.size ?? 0) : "",
+          name: `${entry.name}${entry.isDirectory ? "/" : ""}`,
+          url: `${urlRoot}${fileUrl}${entry.isDirectory ? "/" : ""}`,
+        };
+      } catch (error) {
+        // Note: Deno.stat for windows system files may be rejected with os error 32.
+        if (!options.quiet) logError(error as Error);
+        return {
+          mode: "(unknown mode)",
+          size: "",
+          name: `${entry.name}${entry.isDirectory ? "/" : ""}`,
+          url: `${urlRoot}${fileUrl}${entry.isDirectory ? "/" : ""}`,
+        };
+      }
+    })());
   }
+
+  const listEntry = await Promise.all(listEntryPromise);
   listEntry.sort((a, b) =>
+    // TODO(iuioiua): Add test to ensure list order is correct
     a.name.toLowerCase() > b.name.toLowerCase() ? 1 : -1
   );
   const formattedDirUrl = `${dirUrl.replace(/\/$/, "")}/`;
-  const page = encoder.encode(dirViewerTemplate(formattedDirUrl, listEntry));
+  const page = dirViewerTemplate(formattedDirUrl, listEntry);
 
-  const headers = setBaseHeaders();
-  headers.set("content-type", "text/html");
+  const headers = createBaseHeaders();
+  headers.set(HEADER.ContentType, "text/html; charset=UTF-8");
 
-  return new Response(page, { status: Status.OK, headers });
+  const status = STATUS_CODE.OK;
+  return new Response(page, {
+    status,
+    statusText: STATUS_TEXT[status],
+    headers,
+  });
 }
 
-function serveFallback(_req: Request, e: Error): Promise<Response> {
-  if (e instanceof URIError) {
-    return Promise.resolve(
-      new Response(STATUS_TEXT.get(Status.BadRequest), {
-        status: Status.BadRequest,
-      }),
-    );
-  } else if (e instanceof Deno.errors.NotFound) {
-    return Promise.resolve(
-      new Response(STATUS_TEXT.get(Status.NotFound), {
-        status: Status.NotFound,
-      }),
-    );
-  }
-
-  return Promise.resolve(
-    new Response(STATUS_TEXT.get(Status.InternalServerError), {
-      status: Status.InternalServerError,
-    }),
-  );
-}
-
-function serverLog(req: Request, status: number): void {
+function serverLog(req: Request, status: number) {
   const d = new Date().toISOString();
   const dateFmt = `[${d.slice(0, 10)} ${d.slice(11, 19)}]`;
-  const normalizedUrl = normalizeURL(req.url);
-  const s = `${dateFmt} [${req.method}] ${normalizedUrl} ${status}`;
+  const url = new URL(req.url);
+  const s = `${dateFmt} [${req.method}] ${url.pathname}${url.search} ${status}`;
   // using console.debug instead of console.log so chrome inspect users can hide request logs
+  // deno-lint-ignore no-console
   console.debug(s);
 }
 
-function setBaseHeaders(): Headers {
-  const headers = new Headers();
-  headers.set("server", "deno");
-
-  // Set "accept-ranges" so that the client knows it can make range requests on future requests
-  headers.set("accept-ranges", "bytes");
-  headers.set("date", new Date().toUTCString());
-
-  return headers;
+function createBaseHeaders(): Headers {
+  return new Headers({
+    server: "deno",
+    // Set "accept-ranges" so that the client knows it can make range requests on future requests
+    [HEADER.AcceptRanges]: "bytes",
+  });
 }
 
 function dirViewerTemplate(dirname: string, entries: EntryInfo[]): string {
@@ -550,7 +516,7 @@ function dirViewerTemplate(dirname: string, entries: EntryInfo[]): string {
       .map((path, index, array) => {
         if (path === "") return "";
         const link = array.slice(0, index + 1).join("/");
-        return `<a href="${link}">${path}</a>`;
+        return `<a href="${escape(link)}">${escape(path)}</a>`;
       })
       .join("/")
   }
@@ -575,7 +541,7 @@ function dirViewerTemplate(dirname: string, entries: EntryInfo[]): string {
                       ${entry.size}
                     </td>
                     <td>
-                      <a href="${entry.url}">${entry.name}</a>
+                      <a href="${escape(entry.url)}">${escape(entry.name)}</a>
                     </td>
                   </tr>
                 `,
@@ -589,23 +555,64 @@ function dirViewerTemplate(dirname: string, entries: EntryInfo[]): string {
   `;
 }
 
-interface ServeDirOptions {
+/** Interface for serveDir options. */
+export interface ServeDirOptions {
+  /** Serves the files under the given directory root. Defaults to your current directory.
+   *
+   * @default {"."}
+   */
   fsRoot?: string;
+  /** Specified that part is stripped from the beginning of the requested pathname.
+   */
   urlRoot?: string;
+  /** Enable directory listing.
+   *
+   * @default {false}
+   */
   showDirListing?: boolean;
+  /** Serves dotfiles.
+   *
+   * @default {false}
+   */
   showDotfiles?: boolean;
+  /** Serves `index.html` as the index file of the directory.
+   *
+   * @default {true}
+   */
+  showIndex?: boolean;
+  /**
+   * Enable CORS via the
+   * {@linkcode https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin | Access-Control-Allow-Origin}
+   * header.
+   *
+   * @default {false}
+   */
   enableCors?: boolean;
+  /** Do not print request level logs.
+   *
+   * @default {false}
+   */
   quiet?: boolean;
+  /** The algorithm to use for generating the ETag.
+   *
+   * @default {"SHA-256"}
+   */
+  etagAlgorithm?: AlgorithmIdentifier;
+  /** Headers to add to each response
+   *
+   * @default {[]}
+   */
+  headers?: string[];
 }
 
 /**
  * Serves the files under the given directory root (opts.fsRoot).
  *
- * ```ts
- * import { serve } from "https://deno.land/std@$STD_VERSION/http/server.ts";
- * import { serveDir } from "https://deno.land/std@$STD_VERSION/http/file_server.ts";
+ * @example Usage
+ * ```ts ignore
+ * import { serveDir } from "@std/http/file-server";
  *
- * serve((req) => {
+ * Deno.serve((req) => {
  *   const pathname = new URL(req.url).pathname;
  *   if (pathname.startsWith("/static")) {
  *     return serveDir(req, {
@@ -617,119 +624,181 @@ interface ServeDirOptions {
  * });
  * ```
  *
- * Optionally you can pass `urlRoot` option. If it's specified that part is stripped from the beginning of the requested pathname.
+ * @example Changing the URL root
  *
- * ```ts
- * import { serveDir } from "https://deno.land/std@$STD_VERSION/http/file_server.ts";
+ * Requests to `/static/path/to/file` will be served from `./public/path/to/file`.
  *
- * // ...
- * serveDir(new Request("http://localhost/static/path/to/file"), {
+ * ```ts ignore
+ * import { serveDir } from "@std/http/file-server";
+ *
+ * Deno.serve((req) => serveDir(req, {
  *   fsRoot: "public",
  *   urlRoot: "static",
- * });
+ * }));
  * ```
  *
- * The above example serves `./public/path/to/file` for the request to `/static/path/to/file`.
- *
- * @param request The request to handle
- * @param opts
- * @returns
+ * @param req The request to handle
+ * @param opts Additional options.
+ * @returns A response for the request.
  */
-export async function serveDir(req: Request, opts: ServeDirOptions = {}) {
-  let response: Response;
-  const target = opts.fsRoot || ".";
-  const urlRoot = opts.urlRoot;
-
-  try {
-    let normalizedPath = normalizeURL(req.url);
-    if (urlRoot) {
-      if (normalizedPath.startsWith("/" + urlRoot)) {
-        normalizedPath = normalizedPath.replace(urlRoot, "");
-      } else {
-        throw new Deno.errors.NotFound();
-      }
-    }
-    const fsPath = posix.join(target, normalizedPath);
-
-    const fileInfo = await Deno.stat(fsPath);
-
-    if (fileInfo.isDirectory) {
-      if (opts.showDirListing) {
-        response = await serveDirIndex(req, fsPath, {
-          dotfiles: opts.showDotfiles || false,
-          target,
-        });
-      } else {
-        throw new Deno.errors.NotFound();
-      }
-    } else {
-      response = await serveFile(req, fsPath);
-    }
-  } catch (e) {
-    const err = e instanceof Error ? e : new Error("[non-error thrown]");
-    console.error(red(err.message));
-    response = await serveFallback(req, err);
+export async function serveDir(
+  req: Request,
+  opts: ServeDirOptions = {},
+): Promise<Response> {
+  if (req.method !== METHOD.Get) {
+    return createStandardResponse(STATUS_CODE.MethodNotAllowed);
   }
 
-  if (opts.enableCors) {
-    assert(response);
-    response.headers.append("access-control-allow-origin", "*");
+  let response: Response;
+  try {
+    response = await createServeDirResponse(req, opts);
+  } catch (error) {
+    if (!opts.quiet) logError(error as Error);
+    response = error instanceof Deno.errors.NotFound
+      ? createStandardResponse(STATUS_CODE.NotFound)
+      : createStandardResponse(STATUS_CODE.InternalServerError);
+  }
+
+  // Do not update the header if the response is a 301 redirect.
+  const isRedirectResponse = isRedirectStatus(response.status);
+
+  if (opts.enableCors && !isRedirectResponse) {
+    response.headers.append(HEADER.AccessControlAllowOrigin, "*");
     response.headers.append(
-      "access-control-allow-headers",
+      HEADER.AccessControlAllowHeaders,
       "Origin, X-Requested-With, Content-Type, Accept, Range",
     );
   }
 
-  if (!opts.quiet) serverLog(req, response!.status);
+  if (!opts.quiet) serverLog(req, response.status);
 
-  return response!;
-}
-
-function normalizeURL(url: string): string {
-  let normalizedUrl = url;
-
-  try {
-    //allowed per https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html
-    const absoluteURI = new URL(normalizedUrl);
-    normalizedUrl = absoluteURI.pathname;
-  } catch (e) {
-    //wasn't an absoluteURI
-    if (!(e instanceof TypeError)) {
-      throw e;
+  if (opts.headers && !isRedirectResponse) {
+    for (const header of opts.headers) {
+      const headerSplit = header.split(":");
+      const name = headerSplit[0]!;
+      const value = headerSplit.slice(1).join(":");
+      response.headers.append(name, value);
     }
   }
 
-  try {
-    normalizedUrl = decodeURI(normalizedUrl);
-  } catch (e) {
-    if (!(e instanceof URIError)) {
-      throw e;
+  return response;
+}
+
+async function createServeDirResponse(
+  req: Request,
+  opts: ServeDirOptions,
+) {
+  const target = opts.fsRoot ?? ".";
+  const urlRoot = opts.urlRoot;
+  const showIndex = opts.showIndex ?? true;
+  const showDotfiles = opts.showDotfiles || false;
+  const { etagAlgorithm = "SHA-256", showDirListing = false, quiet = false } =
+    opts;
+
+  const url = new URL(req.url);
+  const decodedUrl = decodeURIComponent(url.pathname);
+  let normalizedPath = posixNormalize(decodedUrl);
+
+  if (urlRoot && !normalizedPath.startsWith("/" + urlRoot)) {
+    return createStandardResponse(STATUS_CODE.NotFound);
+  }
+
+  // Redirect paths like `/foo////bar` and `/foo/bar/////` to normalized paths.
+  if (normalizedPath !== decodedUrl) {
+    url.pathname = normalizedPath;
+    return Response.redirect(url, 301);
+  }
+
+  if (urlRoot) {
+    normalizedPath = normalizedPath.replace(urlRoot, "");
+  }
+
+  // Remove trailing slashes to avoid ENOENT errors
+  // when accessing a path to a file with a trailing slash.
+  if (normalizedPath.endsWith("/")) {
+    normalizedPath = normalizedPath.slice(0, -1);
+  }
+
+  // Exclude dotfiles if showDotfiles is false
+  if (!showDotfiles && /\/\./.test(normalizedPath)) {
+    return createStandardResponse(STATUS_CODE.NotFound);
+  }
+
+  const fsPath = join(target, normalizedPath);
+  const fileInfo = await Deno.stat(fsPath);
+
+  // For files, remove the trailing slash from the path.
+  if (fileInfo.isFile && url.pathname.endsWith("/")) {
+    url.pathname = url.pathname.slice(0, -1);
+    return Response.redirect(url, 301);
+  }
+  // For directories, the path must have a trailing slash.
+  if (fileInfo.isDirectory && !url.pathname.endsWith("/")) {
+    // On directory listing pages,
+    // if the current URL's pathname doesn't end with a slash, any
+    // relative URLs in the index file will resolve against the parent
+    // directory, rather than the current directory. To prevent that, we
+    // return a 301 redirect to the URL with a slash.
+    url.pathname += "/";
+    return Response.redirect(url, 301);
+  }
+
+  // if target is file, serve file.
+  if (!fileInfo.isDirectory) {
+    return serveFile(req, fsPath, {
+      etagAlgorithm,
+      fileInfo,
+    });
+  }
+
+  // if target is directory, serve index or dir listing.
+  if (showIndex) { // serve index.html
+    const indexPath = join(fsPath, "index.html");
+
+    let indexFileInfo: Deno.FileInfo | undefined;
+    try {
+      indexFileInfo = await Deno.lstat(indexPath);
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) {
+        throw error;
+      }
+      // skip Not Found error
+    }
+
+    if (indexFileInfo?.isFile) {
+      return serveFile(req, indexPath, {
+        etagAlgorithm,
+        fileInfo: indexFileInfo,
+      });
     }
   }
 
-  if (normalizedUrl[0] !== "/") {
-    throw new URIError("The request URI is malformed.");
+  if (showDirListing) { // serve directory list
+    return serveDirIndex(fsPath, { urlRoot, showDotfiles, target, quiet });
   }
 
-  normalizedUrl = posix.normalize(normalizedUrl);
-  const startOfParams = normalizedUrl.indexOf("?");
-
-  return startOfParams > -1
-    ? normalizedUrl.slice(0, startOfParams)
-    : normalizedUrl;
+  return createStandardResponse(STATUS_CODE.NotFound);
 }
 
-function main(): void {
-  const serverArgs = parse(Deno.args, {
-    string: ["port", "host", "cert", "key"],
-    boolean: ["help", "dir-listing", "dotfiles", "cors", "quiet"],
+function logError(error: Error) {
+  // deno-lint-ignore no-console
+  console.error(`%c${error.message}`, "color: red");
+}
+
+function main() {
+  const serverArgs = parseArgs(Deno.args, {
+    string: ["port", "host", "cert", "key", "header"],
+    boolean: ["help", "dir-listing", "dotfiles", "cors", "verbose", "version"],
+    negatable: ["dir-listing", "dotfiles", "cors"],
+    collect: ["header"],
     default: {
       "dir-listing": true,
       dotfiles: true,
       cors: true,
-      quiet: false,
+      verbose: false,
+      version: false,
       host: "0.0.0.0",
-      port: "4507",
+      port: undefined,
       cert: "",
       key: "",
     },
@@ -738,9 +807,13 @@ function main(): void {
       c: "cert",
       k: "key",
       h: "help",
+      v: "verbose",
+      V: "version",
+      H: "header",
     },
-  }) as FileServerArgs;
-  const port = serverArgs.port;
+  });
+  const port = serverArgs.port ? Number(serverArgs.port) : undefined;
+  const headers = serverArgs.header ?? [];
   const host = serverArgs.host;
   const certFile = serverArgs.cert;
   const keyFile = serverArgs.key;
@@ -750,15 +823,23 @@ function main(): void {
     Deno.exit();
   }
 
+  if (serverArgs.version) {
+    // deno-lint-ignore no-console
+    console.log(`Deno File Server ${denoConfig.version}`);
+    Deno.exit();
+  }
+
   if (keyFile || certFile) {
     if (keyFile === "" || certFile === "") {
+      // deno-lint-ignore no-console
       console.log("--key and --cert are required for TLS");
       printUsage();
       Deno.exit(1);
     }
   }
 
-  const target = posix.resolve(serverArgs._[0] ?? "");
+  const wild = serverArgs._ as string[];
+  const target = resolve(wild[0] ?? "");
 
   const handler = (req: Request): Promise<Response> => {
     return serveDir(req, {
@@ -766,54 +847,80 @@ function main(): void {
       showDirListing: serverArgs["dir-listing"],
       showDotfiles: serverArgs.dotfiles,
       enableCors: serverArgs.cors,
-      quiet: serverArgs.quiet,
+      quiet: !serverArgs.verbose,
+      headers,
     });
   };
 
-  const useTls = Boolean(keyFile || certFile);
+  const useTls = !!(keyFile && certFile);
 
-  if (useTls) {
-    serveTls(handler, {
-      port: Number(port),
-      hostname: host,
-      certFile,
-      keyFile,
-    });
-  } else {
-    serve(handler, { port: Number(port), hostname: host });
+  function onListen({ port, hostname }: { port: number; hostname: string }) {
+    let networkAddress: string | undefined = undefined;
+    if (NET_PERM_STATUS === "granted") {
+      networkAddress = getNetworkAddress();
+    }
+    const protocol = useTls ? "https" : "http";
+    const host = (Deno.build.os === "windows" && hostname === "0.0.0.0")
+      ? "localhost"
+      : hostname;
+
+    const formattedHost = hostname.includes(":") ? `[${host}]` : host;
+    let message =
+      `Listening on:\n- Local: ${protocol}://${formattedHost}:${port}`;
+    if (networkAddress && !DENO_DEPLOYMENT_ID) {
+      message += `\n- Network: ${protocol}://${networkAddress}:${port}`;
+    }
+    // deno-lint-ignore no-console
+    console.log(message);
   }
 
-  const protocol = useTls ? "https" : "http";
-  console.log(
-    `${protocol.toUpperCase()} server listening on ${protocol}://${
-      host.replace(
-        "0.0.0.0",
-        "localhost",
-      )
-    }:${port}/`,
-  );
+  // TODO(petamoriken): Migrate `Deno.ServeTcpOptions | (Deno.ServeTcpOptions & Deno.TlsCertifiedKeyOptions)` in v2
+  const options: {
+    port?: number;
+    hostname?: string;
+    onListen?: (localAddr: Deno.NetAddr) => void;
+    cert?: string;
+    key?: string;
+  } = {
+    hostname: host,
+    onListen,
+  };
+  if (port !== undefined) {
+    options.port = port;
+  }
+  if (useTls) {
+    options.cert = Deno.readTextFileSync(certFile);
+    options.key = Deno.readTextFileSync(keyFile);
+  }
+  Deno.serve(options, handler);
 }
 
 function printUsage() {
-  console.log(`Deno File Server
+  // deno-lint-ignore no-console
+  console.log(`Deno File Server ${denoConfig.version}
   Serves a local directory in HTTP.
 
 INSTALL:
-  deno install --allow-net --allow-read https://deno.land/std/http/file_server.ts
+  deno install --allow-net --allow-read --allow-sys jsr:@std/http@${denoConfig.version}/file-server
 
 USAGE:
   file_server [path] [options]
 
 OPTIONS:
-  -h, --help          Prints help information
-  -p, --port <PORT>   Set port
-  --cors              Enable CORS via the "Access-Control-Allow-Origin" header
-  --host     <HOST>   Hostname (default is 0.0.0.0)
-  -c, --cert <FILE>   TLS certificate file (enables TLS)
-  -k, --key  <FILE>   TLS key file (enables TLS)
-  --no-dir-listing    Disable directory listing
-  --no-dotfiles       Do not show dotfiles
-  --quiet             Do not print request level logs
+  -h, --help            Prints help information
+  -p, --port <PORT>     Set port (default is 8000)
+  --cors                Enable CORS via the "Access-Control-Allow-Origin" header
+  --host     <HOST>     Hostname (default is 0.0.0.0)
+  -c, --cert <FILE>     TLS certificate file (enables TLS)
+  -k, --key  <FILE>     TLS key file (enables TLS)
+  -H, --header <HEADER> Sets a header on every request.
+                        (e.g. --header "Cache-Control: no-cache")
+                        This option can be specified multiple times.
+  --no-dir-listing      Disable directory listing
+  --no-dotfiles         Do not show dotfiles
+  --no-cors             Disable cross-origin resource sharing
+  -v, --verbose         Print request level logs
+  -V, --version         Print version information
 
   All TLS options are required when one is provided.`);
 }

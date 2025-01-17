@@ -1,4 +1,23 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
+
+/**
+ * Helpers for working with the filesystem.
+ *
+ * ```ts ignore
+ * import { ensureFile, copy, ensureDir, move } from "@std/fs";
+ *
+ * await ensureFile("example.txt");
+ *
+ * await copy("example.txt", "example_copy.txt");
+ *
+ * await ensureDir("subdir");
+ *
+ * await move("example_copy.txt", "subdir/example_copy.txt");
+ * ```
+ *
+ * @module
+ */
+
 export * from "./empty_dir.ts";
 export * from "./ensure_dir.ts";
 export * from "./ensure_file.ts";

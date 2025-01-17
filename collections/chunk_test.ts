@@ -1,6 +1,6 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 
-import { assertEquals, assertThrows } from "../testing/asserts.ts";
+import { assertEquals, assertThrows } from "@std/assert";
 import { chunk } from "./chunk.ts";
 
 function chunkTest<I>(
@@ -15,7 +15,7 @@ function chunkTest<I>(
 const testArray = [1, 2, 3, 4, 5, 6];
 
 Deno.test({
-  name: "[collections/chunk] no mutation",
+  name: "chunk() handles no mutation",
   fn() {
     const array = [1, 2, 3, 4];
     chunk(array, 2);
@@ -25,18 +25,38 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/chunk] throws on non naturals",
+  name: "chunk() throws on non naturals",
   fn() {
-    assertThrows(() => chunk([], +.5));
-    assertThrows(() => chunk([], -4.7));
-    assertThrows(() => chunk([], -2));
-    assertThrows(() => chunk([], +0));
-    assertThrows(() => chunk([], -0));
+    assertThrows(
+      () => chunk([], +.5),
+      RangeError,
+      "Expected size to be an integer greater than 0 but found 0.5",
+    );
+    assertThrows(
+      () => chunk([], -4.7),
+      RangeError,
+      "Expected size to be an integer greater than 0 but found -4.7",
+    );
+    assertThrows(
+      () => chunk([], -2),
+      RangeError,
+      "Expected size to be an integer greater than 0 but found -2",
+    );
+    assertThrows(
+      () => chunk([], +0),
+      RangeError,
+      "Expected size to be an integer greater than 0 but found 0",
+    );
+    assertThrows(
+      () => chunk([], -0),
+      RangeError,
+      "Expected size to be an integer greater than 0 but found 0",
+    );
   },
 });
 
 Deno.test({
-  name: "[collections/chunk] empty input",
+  name: "chunk() handles empty input",
   fn() {
     chunkTest(
       [[], 1],
@@ -46,7 +66,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/chunk] single element chunks",
+  name: "chunk() handles single element chunks",
   fn() {
     chunkTest(
       [testArray, 1],
@@ -60,7 +80,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/chunk] n chunks fitting",
+  name: "chunk() handles n chunks fitting",
   fn() {
     chunkTest(
       [testArray, 2],
@@ -74,7 +94,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/chunk] n chunks not fitting",
+  name: "chunk() handles n chunks not fitting",
   fn() {
     chunkTest(
       [testArray, 4],
@@ -88,7 +108,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[collections/chunk] chunks equal to length",
+  name: "chunk() handles chunks equal to length",
   fn() {
     chunkTest(
       [testArray, testArray.length],

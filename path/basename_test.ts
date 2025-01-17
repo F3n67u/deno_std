@@ -1,75 +1,178 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // Copyright the Browserify authors. MIT License.
 // Ported from https://github.com/browserify/path-browserify/
-import { assertEquals } from "../testing/asserts.ts";
-import * as path from "./mod.ts";
+import { assertEquals, assertThrows } from "@std/assert";
+import { basename } from "./basename.ts";
+import * as posix from "./posix/mod.ts";
+import * as windows from "./windows/mod.ts";
+import { basename as posixUnstableBasename } from "./posix/unstable_basename.ts";
+import { basename as windowsUnstableBasename } from "./windows/unstable_basename.ts";
 
-Deno.test("basename", function () {
-  assertEquals(path.basename(".js", ".js"), "");
-  assertEquals(path.basename(""), "");
-  assertEquals(path.basename("/dir/basename.ext"), "basename.ext");
-  assertEquals(path.basename("/basename.ext"), "basename.ext");
-  assertEquals(path.basename("basename.ext"), "basename.ext");
-  assertEquals(path.basename("basename.ext/"), "basename.ext");
-  assertEquals(path.basename("basename.ext//"), "basename.ext");
-  assertEquals(path.basename("aaa/bbb", "/bbb"), "bbb");
-  assertEquals(path.basename("aaa/bbb", "a/bbb"), "bbb");
-  assertEquals(path.basename("aaa/bbb", "bbb"), "bbb");
-  assertEquals(path.basename("aaa/bbb//", "bbb"), "bbb");
-  assertEquals(path.basename("aaa/bbb", "bb"), "b");
-  assertEquals(path.basename("aaa/bbb", "b"), "bb");
-  assertEquals(path.basename("/aaa/bbb", "/bbb"), "bbb");
-  assertEquals(path.basename("/aaa/bbb", "a/bbb"), "bbb");
-  assertEquals(path.basename("/aaa/bbb", "bbb"), "bbb");
-  assertEquals(path.basename("/aaa/bbb//", "bbb"), "bbb");
-  assertEquals(path.basename("/aaa/bbb", "bb"), "b");
-  assertEquals(path.basename("/aaa/bbb", "b"), "bb");
-  assertEquals(path.basename("/aaa/bbb"), "bbb");
-  assertEquals(path.basename("/aaa/"), "aaa");
-  assertEquals(path.basename("/aaa/b"), "b");
-  assertEquals(path.basename("/a/b"), "b");
-  assertEquals(path.basename("//a"), "a");
+// Test suite from "GNU core utilities"
+// https://github.com/coreutils/coreutils/blob/master/tests/misc/basename.pl
+const COREUTILS_TESTSUITE = [
+  [["d/f"], "f"],
+  [["/d/f"], "f"],
+  [["d/f/"], "f"],
+  [["d/f//"], "f"],
+  [["f"], "f"],
+  [["/"], "/"],
+  [["///"], "/"],
+  [["///a///"], "a"],
+  [[""], ""],
+  [["aa", "a"], "a"],
+  [["a-a", "-a"], "a"],
+  [["f.s", ".s"], "f"],
+  [["fs", "s"], "f"],
+  [["fs", "fs"], "fs"],
+  [["fs/", "s"], "f"],
+  [["dir/file.suf", ".suf"], "file"],
+  [["fs", "x"], "fs"],
+  [["fs", ""], "fs"],
+  [["fs/", "s/"], "fs"],
+] as const;
+
+const POSIX_TESTSUITE = [
+  [[""], ""],
+  [["/dir/basename.ext"], "basename.ext"],
+  [["/basename.ext"], "basename.ext"],
+  [["basename.ext"], "basename.ext"],
+  [["basename.ext/"], "basename.ext"],
+  [["basename.ext//"], "basename.ext"],
+  [["aaa/bbb", "/bbb"], "bbb"],
+  [["aaa/bbb", "a/bbb"], "bbb"],
+  [["aaa/bbb", "bbb"], "bbb"],
+  [["aaa/bbb//", "bbb"], "bbb"],
+  [["aaa/bbb", "bb"], "b"],
+  [["aaa/bbb", "b"], "bb"],
+  [["/aaa/bbb", "/bbb"], "bbb"],
+  [["/aaa/bbb", "a/bbb"], "bbb"],
+  [["/aaa/bbb", "bbb"], "bbb"],
+  [["/aaa/bbb//", "bbb"], "bbb"],
+  [["/aaa/bbb//", "a/bbb"], "bbb"],
+  [["/aaa/bbb", "bb"], "b"],
+  [["/aaa/bbb", "b"], "bb"],
+  [["/aaa/bbb"], "bbb"],
+  [["/aaa/"], "aaa"],
+  [["/aaa/b"], "b"],
+  [["/a/b"], "b"],
+  [["//a"], "a"],
+  [["///"], "/"],
+  [["///", "bbb"], "/"],
+  [["//", "bbb"], "/"],
+] as const;
+
+const POSIX_URL_TESTSUITE = [
+  [[new URL("file:///dir/basename.ext")], "basename.ext"],
+  [[new URL("file:///basename.ext"), ".ext"], "basename"],
+  [[new URL("file:///dir/basename.ext")], "basename.ext"],
+  [[new URL("file:///aaa/bbb/")], "bbb"],
+  [[new URL("file:///aaa/bbb"), "b"], "bb"],
+  [[new URL("file:///aaa/bbb"), "bb"], "b"],
+  [[new URL("file:///aaa/bbb"), "bbb"], "bbb"],
+  [[new URL("file:///aaa/bbb"), "a/bbb"], "bbb"],
+  [[new URL("file://///a")], "a"],
+] as const;
+
+const WIN_TESTSUITE = [
+  [["\\dir\\basename.ext"], "basename.ext"],
+  [["\\basename.ext"], "basename.ext"],
+  [["basename.ext"], "basename.ext"],
+  [["basename.ext\\"], "basename.ext"],
+  [["basename.ext\\\\"], "basename.ext"],
+  [["foo"], "foo"],
+  [["aaa\\bbb", "\\bbb"], "bbb"],
+  [["aaa\\bbb", "a\\bbb"], "bbb"],
+  [["aaa\\bbb", "bbb"], "bbb"],
+  [["aaa\\bbb\\\\\\\\", "bbb"], "bbb"],
+  [["aaa\\bbb", "bb"], "b"],
+  [["aaa\\bbb", "b"], "bb"],
+  [["/aaa/bbb", "bb"], "b"],
+  [["C:"], ""],
+  [["C:."], "."],
+  [["C:\\"], "\\"],
+  [["C:\\dir\\base.ext"], "base.ext"],
+  [["C:\\basename.ext"], "basename.ext"],
+  [["C:basename.ext"], "basename.ext"],
+  [["C:basename.ext\\"], "basename.ext"],
+  [["C:basename.ext\\\\"], "basename.ext"],
+  [["C:foo"], "foo"],
+  [["file:stream"], "file:stream"],
+] as const;
+
+const WIN_URL_TESTSUITE = [
+  [[new URL("file:///")], "\\"],
+  [[new URL("file:///C:/")], "\\"],
+  [[new URL("file:///C:/aaa")], "aaa"],
+  [[new URL("file://///"), undefined], "\\"],
+] as const;
+
+Deno.test("posix.basename()", function () {
+  for (const [[name, suffix], expected] of COREUTILS_TESTSUITE) {
+    assertEquals(basename(name, suffix), expected);
+  }
+
+  for (const [[name, suffix], expected] of POSIX_TESTSUITE) {
+    // deno-lint-ignore no-explicit-any
+    assertEquals(posix.basename(name as any, suffix), expected);
+  }
 
   // On unix a backslash is just treated as any other character.
   assertEquals(
-    path.posix.basename("\\dir\\basename.ext"),
+    posix.basename("\\dir\\basename.ext"),
     "\\dir\\basename.ext",
   );
-  assertEquals(path.posix.basename("\\basename.ext"), "\\basename.ext");
-  assertEquals(path.posix.basename("basename.ext"), "basename.ext");
-  assertEquals(path.posix.basename("basename.ext\\"), "basename.ext\\");
-  assertEquals(path.posix.basename("basename.ext\\\\"), "basename.ext\\\\");
-  assertEquals(path.posix.basename("foo"), "foo");
+  assertEquals(posix.basename("\\basename.ext"), "\\basename.ext");
+  assertEquals(posix.basename("basename.ext"), "basename.ext");
+  assertEquals(posix.basename("basename.ext\\"), "basename.ext\\");
+  assertEquals(posix.basename("basename.ext\\\\"), "basename.ext\\\\");
+  assertEquals(posix.basename("foo"), "foo");
 
   // POSIX filenames may include control characters
   const controlCharFilename = "Icon" + String.fromCharCode(13);
   assertEquals(
-    path.posix.basename("/a/b/" + controlCharFilename),
+    posix.basename("/a/b/" + controlCharFilename),
     controlCharFilename,
   );
 });
 
-Deno.test("basenameWin32", function () {
-  assertEquals(path.win32.basename("\\dir\\basename.ext"), "basename.ext");
-  assertEquals(path.win32.basename("\\basename.ext"), "basename.ext");
-  assertEquals(path.win32.basename("basename.ext"), "basename.ext");
-  assertEquals(path.win32.basename("basename.ext\\"), "basename.ext");
-  assertEquals(path.win32.basename("basename.ext\\\\"), "basename.ext");
-  assertEquals(path.win32.basename("foo"), "foo");
-  assertEquals(path.win32.basename("aaa\\bbb", "\\bbb"), "bbb");
-  assertEquals(path.win32.basename("aaa\\bbb", "a\\bbb"), "bbb");
-  assertEquals(path.win32.basename("aaa\\bbb", "bbb"), "bbb");
-  assertEquals(path.win32.basename("aaa\\bbb\\\\\\\\", "bbb"), "bbb");
-  assertEquals(path.win32.basename("aaa\\bbb", "bb"), "b");
-  assertEquals(path.win32.basename("aaa\\bbb", "b"), "bb");
-  assertEquals(path.win32.basename("C:"), "");
-  assertEquals(path.win32.basename("C:."), ".");
-  assertEquals(path.win32.basename("C:\\"), "");
-  assertEquals(path.win32.basename("C:\\dir\\base.ext"), "base.ext");
-  assertEquals(path.win32.basename("C:\\basename.ext"), "basename.ext");
-  assertEquals(path.win32.basename("C:basename.ext"), "basename.ext");
-  assertEquals(path.win32.basename("C:basename.ext\\"), "basename.ext");
-  assertEquals(path.win32.basename("C:basename.ext\\\\"), "basename.ext");
-  assertEquals(path.win32.basename("C:foo"), "foo");
-  assertEquals(path.win32.basename("file:stream"), "file:stream");
+Deno.test("posix (unstable) basename() throws with non-file URL", () => {
+  assertThrows(
+    () => posixUnstableBasename(new URL("https://deno.land/")),
+    TypeError,
+    'URL must be a file URL: received "https:"',
+  );
+  for (const [[name, suffix], expected] of POSIX_URL_TESTSUITE) {
+    assertEquals(posixUnstableBasename(name, suffix), expected);
+  }
+});
+
+Deno.test("windows.basename()", function () {
+  for (const [[name, suffix], expected] of WIN_TESTSUITE) {
+    // deno-lint-ignore no-explicit-any
+    assertEquals(windows.basename(name as any, suffix), expected);
+  }
+
+  // windows should pass all "forward slash" posix tests as well.
+  for (const [[name, suffix], expected] of COREUTILS_TESTSUITE) {
+    // deno-lint-ignore no-explicit-any
+    assertEquals(windows.basename(name as any, suffix), expected);
+  }
+
+  for (const [[name, suffix], expected] of POSIX_TESTSUITE) {
+    // deno-lint-ignore no-explicit-any
+    assertEquals(windows.basename(name as any, suffix), expected);
+  }
+});
+
+Deno.test("windows (unstable) basename() throws with non-file URL", () => {
+  for (const [[name, suffix], expected] of WIN_URL_TESTSUITE) {
+    assertEquals(windowsUnstableBasename(name, suffix), expected);
+  }
+
+  assertThrows(
+    () => windowsUnstableBasename(new URL("https://deno.land/")),
+    TypeError,
+    'URL must be a file URL: received "https:"',
+  );
 });

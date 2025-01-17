@@ -1,40 +1,35 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
-import { SEP } from "./separator.ts";
+import { common as _common } from "./_common/common.ts";
+import { SEPARATOR } from "./constants.ts";
 
-/** Determines the common path from a set of paths, using an optional separator,
- * which defaults to the OS default separator.
+/**
+ * Determines the common path from a set of paths for the given OS.
  *
+ * @param paths Paths to search for common path.
+ * @returns The common path.
+ *
+ * @example Usage
  * ```ts
- *       import { common } from "https://deno.land/std@$STD_VERSION/path/mod.ts";
- *       const p = common([
- *         "./deno/std/path/mod.ts",
- *         "./deno/std/fs/mod.ts",
- *       ]);
- *       console.log(p); // "./deno/std/"
+ * import { common } from "@std/path/common";
+ * import { assertEquals } from "@std/assert";
+ *
+ * if (Deno.build.os === "windows") {
+ *   const path = common([
+ *     "C:\\deno\\std\\path\\mod.ts",
+ *     "C:\\deno\\std\\fs\\mod.ts"
+ *   ]);
+ *   assertEquals(path, "C:\\deno\\std\\");
+ * } else {
+ *   const path = common([
+ *     "./deno/std/path/mod.ts",
+ *     "./deno/std/fs/mod.ts"
+ *   ]);
+ *   assertEquals(path, "./deno/std/");
+ * }
  * ```
  */
-export function common(paths: string[], sep = SEP): string {
-  const [first = "", ...remaining] = paths;
-  if (first === "" || remaining.length === 0) {
-    return first.substring(0, first.lastIndexOf(sep) + 1);
-  }
-  const parts = first.split(sep);
-
-  let endOfPrefix = parts.length;
-  for (const path of remaining) {
-    const compare = path.split(sep);
-    for (let i = 0; i < endOfPrefix; i++) {
-      if (compare[i] !== parts[i]) {
-        endOfPrefix = i;
-      }
-    }
-
-    if (endOfPrefix === 0) {
-      return "";
-    }
-  }
-  const prefix = parts.slice(0, endOfPrefix).join(sep);
-  return prefix.endsWith(sep) ? prefix : `${prefix}${sep}`;
+export function common(paths: string[]): string {
+  return _common(paths, SEPARATOR);
 }

@@ -1,27 +1,35 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
- * Applies the given selector to all elements in the given collection and calculates the sum of the results
+ * Applies the given selector to all elements in the given collection and
+ * calculates the sum of the results.
  *
- * Example:
+ * @typeParam T The type of the array elements.
  *
+ * @param array The array to calculate the sum of.
+ * @param selector The selector function to get the value to sum.
+ *
+ * @returns The sum of all elements in the collection.
+ *
+ * @example Basic usage
  * ```ts
- * import { sumOf } from "https://deno.land/std@$STD_VERSION/collections/mod.ts"
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts"
+ * import { sumOf } from "@std/collections/sum-of";
+ * import { assertEquals } from "@std/assert";
  *
  * const people = [
- *     { name: 'Anna', age: 34 },
- *     { name: 'Kim', age: 42 },
- *     { name: 'John', age: 23 },
- * ]
- * const totalAge = sumOf(people, i => i.age)
+ *   { name: "Anna", age: 34 },
+ *   { name: "Kim", age: 42 },
+ *   { name: "John", age: 23 },
+ * ];
  *
- * assertEquals(totalAge, 99)
+ * const totalAge = sumOf(people, (person) => person.age);
+ *
+ * assertEquals(totalAge, 99);
  * ```
  */
 export function sumOf<T>(
-  array: readonly T[],
+  array: Iterable<T>,
   selector: (el: T) => number,
 ): number {
   let sum = 0;

@@ -1,60 +1,58 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
-/** Get log level numeric values through enum constants */
-export enum LogLevels {
-  NOTSET = 0,
-  DEBUG = 10,
-  INFO = 20,
-  WARNING = 30,
-  ERROR = 40,
-  CRITICAL = 50,
-}
+/**
+ * Use this to retrieve the numeric log level by it's associated name.
+ * Defaults to INFO.
+ *
+ * @internal
+ */
+export const LogLevels = {
+  NOTSET: 0,
+  DEBUG: 10,
+  INFO: 20,
+  WARN: 30,
+  ERROR: 40,
+  CRITICAL: 50,
+} as const;
+
+/** Union of valid log levels */
+export type LogLevel = typeof LogLevels[LevelName];
+
+/** Union of valid log level names */
+export type LevelName = Exclude<keyof typeof LogLevels, number>;
 
 /** Permitted log level names */
-export const LogLevelNames = Object.keys(LogLevels).filter((key) =>
+export const LogLevelNames: LevelName[] = Object.keys(LogLevels).filter((key) =>
   isNaN(Number(key))
-);
+) as LevelName[];
 
-/** Union of valid log level strings */
-export type LevelName = keyof typeof LogLevels;
-
-const byLevel: Record<string, LevelName> = {
-  [String(LogLevels.NOTSET)]: "NOTSET",
-  [String(LogLevels.DEBUG)]: "DEBUG",
-  [String(LogLevels.INFO)]: "INFO",
-  [String(LogLevels.WARNING)]: "WARNING",
-  [String(LogLevels.ERROR)]: "ERROR",
-  [String(LogLevels.CRITICAL)]: "CRITICAL",
+const byLevel: Record<LogLevel, LevelName> = {
+  [LogLevels.NOTSET]: "NOTSET",
+  [LogLevels.DEBUG]: "DEBUG",
+  [LogLevels.INFO]: "INFO",
+  [LogLevels.WARN]: "WARN",
+  [LogLevels.ERROR]: "ERROR",
+  [LogLevels.CRITICAL]: "CRITICAL",
 };
 
-/** Returns the numeric log level associated with the passed,
+/**
+ * Returns the numeric log level associated with the passed,
  * stringy log level name.
  */
-export function getLevelByName(name: LevelName): number {
-  switch (name) {
-    case "NOTSET":
-      return LogLevels.NOTSET;
-    case "DEBUG":
-      return LogLevels.DEBUG;
-    case "INFO":
-      return LogLevels.INFO;
-    case "WARNING":
-      return LogLevels.WARNING;
-    case "ERROR":
-      return LogLevels.ERROR;
-    case "CRITICAL":
-      return LogLevels.CRITICAL;
-    default:
-      throw new Error(`no log level found for "${name}"`);
+export function getLevelByName(name: LevelName): LogLevel {
+  const level = LogLevels[name];
+  if (level !== undefined) {
+    return level;
   }
+  throw new Error(`Cannot get log level: no level named ${name}`);
 }
 
-/** Returns the stringy log level name provided the numeric log level */
-export function getLevelName(level: number): LevelName {
-  const levelName = byLevel[level];
+/** Returns the stringy log level name provided the numeric log level. */
+export function getLevelName(level: LogLevel): LevelName {
+  const levelName = byLevel[level as LogLevel];
   if (levelName) {
     return levelName;
   }
-  throw new Error(`no level name found for level: ${level}`);
+  throw new Error(`Cannot get log level: no name for level: ${level}`);
 }

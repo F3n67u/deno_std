@@ -1,36 +1,44 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
- * Returns all elements in the given array that produce a distinct value using the given selector, preserving order by first occurrence
+ * Returns all elements in the given array that produce a unique value using
+ * the given discriminator, with the first matching occurrence retained.
  *
- * Example:
+ * Uniqueness is determined by same-value-zero equality of the returned values.
  *
+ * @typeParam T The type of the elements in the input array.
+ * @typeParam D The type of the values produced by the discriminator function.
+ *
+ * @param array The array to filter for distinct elements.
+ * @param discriminator The function to extract the value to compare for
+ * uniqueness.
+ *
+ * @returns An array of distinct elements in the input array.
+ *
+ * @example Basic usage
  * ```ts
- * import { distinctBy } from "https://deno.land/std@$STD_VERSION/collections/mod.ts";
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts";
+ * import { distinctBy } from "@std/collections/distinct-by";
+ * import { assertEquals } from "@std/assert";
  *
- * const names = [ 'Anna', 'Kim', 'Arnold', 'Kate' ]
- * const exampleNamesByFirstLetter = distinctBy(names, it => it.charAt(0))
+ * const users = [{ id: 1, name: "Anna" }, { id: 2, name: "Kim" }, { id: 1, name: "Anna again" }];
+ * const uniqueUsers = distinctBy(users, (user) => user.id);
  *
- * assertEquals(exampleNamesByFirstLetter, [ 'Anna', 'Kim' ])
+ * assertEquals(uniqueUsers, [{ id: 1, name: "Anna" }, { id: 2, name: "Kim" }]);
  * ```
  */
 export function distinctBy<T, D>(
-  array: readonly T[],
-  selector: (el: T) => D,
+  array: Iterable<T>,
+  discriminator: (el: T) => D,
 ): T[] {
-  const selectedValues = new Set<D>();
-  const ret: T[] = [];
-
+  const keys = new Set<D>();
+  const result: T[] = [];
   for (const element of array) {
-    const currentSelectedValue = selector(element);
-
-    if (!selectedValues.has(currentSelectedValue)) {
-      selectedValues.add(currentSelectedValue);
-      ret.push(element);
+    const key = discriminator(element);
+    if (!keys.has(key)) {
+      keys.add(key);
+      result.push(element);
     }
   }
-
-  return ret;
+  return result;
 }

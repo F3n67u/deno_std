@@ -1,116 +1,49 @@
-# Deno Standard Modules
+# Deno Standard Library
 
-[![codecov](https://codecov.io/gh/denoland/deno_std/branch/main/graph/badge.svg?token=w6s3ODtULz)](https://codecov.io/gh/denoland/deno_std)
+[![JSR @std](https://jsr.io/badges/@std)](https://jsr.io/@std)
+[![codecov](https://codecov.io/gh/denoland/std/branch/main/graph/badge.svg?token=w6s3ODtULz)](https://codecov.io/gh/denoland/std)
+[![ci](https://github.com/denoland/std/actions/workflows/ci.yml/badge.svg)](https://github.com/denoland/std/actions/workflows/ci.yml)
 
-These modules do not have external dependencies and they are reviewed by the
-Deno core team. The intention is to have a standard set of high quality code
-that all Deno projects can use fearlessly.
+High-quality APIs for [Deno](https://deno.com/) and the web. Use fearlessly.
 
-Contributions are welcome!
+> [!IMPORTANT]
+> Newer versions of the Standard Library are now hosted on
+> [JSR](https://jsr.io/@std). Older versions up till 0.224.0 are still available
+> at [deno.land/std](https://deno.land/std).
+
+## Resources
+
+- [Package list](https://jsr.io/@std)
+- [Architecture guide](./.github/ARCHITECTURE.md)
+- [Design documentation](.github/ARCHITECTURE.md#design)
+- [Contributing guidelines](.github/CONTRIBUTING.md)
+- [Frequently asked questions (FAQ)](./.github/FAQ.md)
 
 ## Releases
 
-Standard library is currently tagged independently of Deno version. This will
-change once the library is stabilized.
+Package versions >=1.0.0 follow [Semantic Versioning](https://semver.org/), and
+package versions <1.0.0 follow
+[this proposal](https://github.com/semver/semver/pull/923).
 
-To check compatibility of different version of standard library with Deno CLI
-see
-[this list](https://raw.githubusercontent.com/denoland/dotland/main/versions.json).
+## Badge
 
-## How to use
+> [!NOTE]
+> Previously, this repo hosted the badge SVG file. Now, the badge is retrieved
+> directly from [Shields.io](https://shields.io/).
 
-These modules will eventually be tagged in accordance with Deno releases but as
-of today we do not yet consider them stable and so we version the standard
-modules differently from the Deno runtime to reflect this.
+[![Built with the Deno Standard Library](https://img.shields.io/badge/Built_with_std-blue?logo=deno)](https://jsr.io/@std)
 
-It is strongly recommended that you link to tagged releases to avoid unintended
-updates and breaking changes.
+```html
+<a href="https://jsr.io/@std">
+  <img
+    width="135"
+    height="20"
+    src="https://img.shields.io/badge/Built_with_std-blue?logo=deno"
+    alt="Built with the Deno Standard Library"
+  />
+</a>
+```
 
-Don't link to / import any module whose path:
-
-- Has a name or parent with an underscore prefix: `_foo.ts`, `_util/bar.ts`.
-- Is that of a test module or test data: `test.ts`, `foo_test.ts`,
-  `testdata/bar.txt`.
-
-Don't import any symbol with an underscore prefix: `export function _baz() {}`.
-
-These elements are not considered part of the public API, thus no stability is
-guaranteed for them.
-
-## Documentation
-
-To browse documentation for modules:
-
-- Go to https://deno.land/std/.
-- Navigate to any module of interest.
-- Click "View Documentation".
-
-## Contributing
-
-**NOTE: This repository was unarchived and synced on Feb, 1st, 2021. If you
-already had it cloned, we suggest to do a fresh clone to avoid git conflicts.**
-
-deno_std is a loose port of [Go's standard library](https://golang.org/pkg/).
-When in doubt, simply port Go's source code, documentation, and tests. There are
-many times when the nature of JavaScript, TypeScript, or Deno itself justifies
-diverging from Go, but if possible we want to leverage the energy that went into
-building Go. We generally welcome direct ports of Go's code.
-
-Please ensure the copyright headers cite the code's origin.
-
-Follow the [style guide](https://deno.land/manual/contributing/style_guide).
-
-### Opening a pull request
-
-After cloning don't forget to `git submodule update --init`.
-
-Before opening a PR make sure to:
-
-- have the latest Deno version installed locally
-- add tests that cover your changes.
-- `deno task test` passes.
-- `deno fmt` passes without changing files.
-- `deno lint` passes.
-
-Give the PR a descriptive title.
-
-Examples of good titles:
-
-- fix(http): Fix race condition in server
-- docs(fmt): Update docstrings
-- feat(log): Handle nested messages
-
-Examples of bad titles:
-
-- fix #7123
-- update docs
-- fix bugs
-
-Ensure there is a related issue and it is referenced in the PR text.
-
-For contributions to the Node compatibility library please check the
-[`std/node` contributing guide](./node/README.md)
-
-_About CI checks_:
-
-We currently have 9 checks on CI. Each PR should pass all of these checks to be
-accepted.
-
-- test with Deno canary on Windows
-- test with Deno canary on Linux
-- test with Deno canary on macOS
-- test Node polyfill with Deno canary on Windows
-- test Node polyfill with Deno canary on Linux
-- test Node polyfill with Deno canary on macOS
-- lint
-- wasm crypto check
-- CLA
-
-_Typechecking code in Markdown files_:
-
-If you want to run `deno test --doc x.md` you will need to specify the flag
-`--import-map=test_import_map.json`, this import map is in the root of deno_std.
-
-_For maintainers_:
-
-To release a new version a tag in the form of `x.y.z` should be added.
+```md
+[![Built with the Deno Standard Library](https://img.shields.io/badge/Built_with_std-blue?logo=deno)](https://jsr.io/@std)
+```

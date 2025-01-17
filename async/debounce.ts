@@ -1,4 +1,4 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
@@ -12,7 +12,7 @@ export interface DebouncedFunction<T extends Array<unknown>> {
   clear(): void;
   /** Clears the debounce timeout and calls the debounced function immediately. */
   flush(): void;
-  /** Returns a boolean wether a debounce call is pending or not. */
+  /** Returns a boolean whether a debounce call is pending or not. */
   readonly pending: boolean;
 }
 
@@ -22,8 +22,9 @@ export interface DebouncedFunction<T extends Array<unknown>> {
  * again before the timeout expires, the previous call will be
  * aborted.
  *
- * ```
- * import { debounce } from "./debounce.ts";
+ * @example Usage
+ * ```ts ignore
+ * import { debounce } from "@std/async/debounce";
  *
  * const log = debounce(
  *   (event: Deno.FsEvent) =>
@@ -34,10 +35,14 @@ export interface DebouncedFunction<T extends Array<unknown>> {
  * for await (const event of Deno.watchFs("./")) {
  *   log(event);
  * }
+ * // wait 200ms ...
+ * // output: Function debounced after 200ms with baz
  * ```
  *
- * @param fn    The function to debounce.
- * @param wait  The time in milliseconds to delay the function.
+ * @typeParam T The arguments of the provided function.
+ * @param fn The function to debounce.
+ * @param wait The time in milliseconds to delay the function.
+ * @returns The debounced function.
  */
 // deno-lint-ignore no-explicit-any
 export function debounce<T extends Array<any>>(
@@ -47,16 +52,16 @@ export function debounce<T extends Array<any>>(
   let timeout: number | null = null;
   let flush: (() => void) | null = null;
 
-  const debounced: DebouncedFunction<T> = ((...args: T): void => {
+  const debounced: DebouncedFunction<T> = ((...args: T) => {
     debounced.clear();
-    flush = (): void => {
+    flush = () => {
       debounced.clear();
       fn.call(debounced, ...args);
     };
-    timeout = setTimeout(flush, wait);
+    timeout = Number(setTimeout(flush, wait));
   }) as DebouncedFunction<T>;
 
-  debounced.clear = (): void => {
+  debounced.clear = () => {
     if (typeof timeout === "number") {
       clearTimeout(timeout);
       timeout = null;
@@ -64,7 +69,7 @@ export function debounce<T extends Array<any>>(
     }
   };
 
-  debounced.flush = (): void => {
+  debounced.flush = () => {
     flush?.();
   };
 

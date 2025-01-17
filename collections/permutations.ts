@@ -1,4 +1,4 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
@@ -6,48 +6,55 @@
  * Ignores equality of elements, meaning this will always return the same
  * number of permutations for a given length of input.
  *
- * Example:
+ * @typeParam T The type of the elements in the array.
  *
+ * @param inputArray The array to build permutations from.
+ *
+ * @returns An array of all possible permutations of the given array.
+ *
+ * @example Basic usage
  * ```ts
- * import { permutations } from "https://deno.land/std@$STD_VERSION/collections/mod.ts";
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts";
+ * import { permutations } from "@std/collections/permutations";
+ * import { assertEquals } from "@std/assert";
  *
- * const numbers = [ 1, 2 ]
- * const windows = permutations(numbers)
+ * const numbers = [ 1, 2 ];
+ * const windows = permutations(numbers);
  *
  * assertEquals(windows, [
- *     [ 1, 2 ],
- *     [ 2, 1 ],
- * ])
+ *   [ 1, 2 ],
+ *   [ 2, 1 ],
+ * ]);
  * ```
  */
-export function permutations<T>(inputArray: readonly T[]): T[][] {
-  const ret: T[][] = [];
-  const k = inputArray.length;
+export function permutations<T>(inputArray: Iterable<T>): T[][] {
+  const result: T[][] = [];
+
+  const array = [...inputArray];
+
+  const k = array.length;
 
   if (k === 0) {
-    return ret;
+    return result;
   }
 
   // Heap's Algorithm
-  const array = [...inputArray];
   const c = new Array<number>(k).fill(0);
 
-  ret.push([...array]);
+  result.push([...array]);
 
   let i = 1;
 
   while (i < k) {
-    if (c[i] < i) {
+    if (c[i]! < i) {
       if (i % 2 === 0) {
-        [array[0], array[i]] = [array[i], array[0]];
+        [array[0], array[i]] = [array[i], array[0]] as [T, T];
       } else {
-        [array[c[i]], array[i]] = [array[i], array[c[i]]];
+        [array[c[i]!], array[i]] = [array[i], array[c[i]!]] as [T, T];
       }
 
-      ret.push([...array]);
+      result.push([...array]);
 
-      c[i] += 1;
+      c[i]! += 1;
       i = 1;
     } else {
       c[i] = 0;
@@ -55,5 +62,5 @@ export function permutations<T>(inputArray: readonly T[]): T[][] {
     }
   }
 
-  return ret;
+  return result;
 }

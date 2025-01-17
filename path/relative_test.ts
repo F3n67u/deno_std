@@ -1,12 +1,14 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // Copyright the Browserify authors. MIT License.
 // Ported from https://github.com/browserify/path-browserify/
-import { assertEquals } from "../testing/asserts.ts";
-import * as path from "./mod.ts";
+import { assertEquals } from "@std/assert";
+import * as posix from "./posix/mod.ts";
+import * as windows from "./windows/mod.ts";
+import { relative } from "./relative.ts";
 
 const relativeTests = {
   // arguments                     result
-  win32: [
+  windows: [
     ["c:/blah\\blah", "d:/games", "d:\\games"],
     ["c:/aaaa/bbbb", "c:/aaaa", ".."],
     ["c:/aaaa/bbbb", "c:/cccc", "..\\..\\cccc"],
@@ -31,7 +33,7 @@ const relativeTests = {
     ["\\\\foo\\baz", "\\\\foo\\baz-quux", "..\\baz-quux"],
     ["C:\\baz", "\\\\foo\\bar\\baz", "\\\\foo\\bar\\baz"],
     ["\\\\foo\\bar\\baz", "C:\\baz", "C:\\baz"],
-  ],
+  ] as const,
   // arguments          result
   posix: [
     ["/var/lib", "/var", ".."],
@@ -46,21 +48,28 @@ const relativeTests = {
     ["/foo/bar/baz", "/foo/bar/baz-quux", "../baz-quux"],
     ["/baz-quux", "/baz", "../baz"],
     ["/baz", "/baz-quux", "../baz-quux"],
-  ],
+  ] as const,
 };
 
-Deno.test("relative", function () {
+Deno.test("posix.relative()", function () {
   relativeTests.posix.forEach(function (p) {
     const expected = p[2];
-    const actual = path.posix.relative(p[0], p[1]);
+    const actual = posix.relative(p[0], p[1]);
     assertEquals(actual, expected);
   });
 });
 
-Deno.test("relativeWin32", function () {
-  relativeTests.win32.forEach(function (p) {
+Deno.test("windows.relative()", function () {
+  relativeTests.windows.forEach(function (p) {
     const expected = p[2];
-    const actual = path.win32.relative(p[0], p[1]);
+    const actual = windows.relative(p[0], p[1]);
     assertEquals(actual, expected);
   });
+});
+
+Deno.test("relative() returns current working directory if input is empty", function () {
+  const pwd = Deno.cwd();
+  assertEquals(relative("", pwd), "");
+  assertEquals(relative(pwd, ""), "");
+  assertEquals(relative(pwd, pwd), "");
 });

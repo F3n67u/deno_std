@@ -1,62 +1,108 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
-// Based on https://github.com/kelektiv/node-uuid -> https://www.ietf.org/rfc/rfc4122.txt
-// Supporting Support for RFC4122 version 1, 4, and 5 UUIDs
+/**
+ * Generators and validators for
+ * {@link https://www.rfc-editor.org/rfc/rfc9562.html | RFC 9562} UUIDs for
+ * versions v1, v3, v4 and v5.
+ *
+ * Use the built-in
+ * {@linkcode https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID | crypto.randomUUID()}
+ * function instead of this package, if you only need to generate v4 UUIDs.
+ *
+ * Based on {@linkcode https://www.npmjs.com/package/uuid | npm:uuid}.
+ *
+ * ```ts
+ * import { v5, NAMESPACE_DNS, NIL_UUID } from "@std/uuid";
+ * import { assert, assertFalse } from "@std/assert";
+ *
+ * const data = new TextEncoder().encode("deno.land");
+ * const uuid = await v5.generate(NAMESPACE_DNS, data);
+ *
+ * assert(v5.validate(uuid));
+ * assertFalse(v5.validate(NIL_UUID));
+ * ```
+ *
+ * @module
+ */
 
-import * as v1 from "./v1.ts";
-import * as v4 from "./v4.ts";
-import * as v5 from "./v5.ts";
+export * from "./common.ts";
+export * from "./constants.ts";
 
-export const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+import { generate as generateV1, validate as validateV1 } from "./v1.ts";
+import { generate as generateV3, validate as validateV3 } from "./v3.ts";
+import { validate as validateV4 } from "./v4.ts";
+import { generate as generateV5, validate as validateV5 } from "./v5.ts";
 
 /**
- * Check if the passed UUID is the nil UUID.
+ * Generator and validator for
+ * {@link https://www.rfc-editor.org/rfc/rfc9562.html#section-5.1 | UUIDv1}.
  *
- * ```js
- * import { isNil } from "./mod.ts";
+ * @example Usage
+ * ```ts
+ * import { v1 } from "@std/uuid";
+ * import { assert } from "@std/assert";
  *
- * isNil("00000000-0000-0000-0000-000000000000") // true
- * isNil(crypto.randomUUID()) // false
+ * const uuid = v1.generate();
+ * assert(v1.validate(uuid as string));
  * ```
  */
-export function isNil(id: string): boolean {
-  return id === NIL_UUID;
-}
+export const v1 = {
+  generate: generateV1,
+  validate: validateV1,
+};
 
 /**
- * Test a string to see if it is a valid UUID.
+ * Generator and validator for
+ * {@link https://www.rfc-editor.org/rfc/rfc9562.html#section-5.3 | UUIDv3}.
  *
- * ```js
- * import { validate } from "./mod.ts"
+ * @example Usage
+ * ```ts
+ * import { v3, NAMESPACE_DNS } from "@std/uuid";
+ * import { assert } from "@std/assert";
  *
- * validate("not a UUID") // false
- * validate("6ec0bd7f-11c0-43da-975e-2a8ad9ebae0b") // true
+ * const data = new TextEncoder().encode("deno.land");
+ * const uuid = await v3.generate(NAMESPACE_DNS, data);
+ * assert(v3.validate(uuid));
  * ```
  */
-export function validate(uuid: string): boolean {
-  return /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000)$/i
-    .test(
-      uuid,
-    );
-}
+export const v3 = {
+  generate: generateV3,
+  validate: validateV3,
+};
 
 /**
- * Detect RFC version of a UUID.
+ * Validator for
+ * {@link https://www.rfc-editor.org/rfc/rfc9562.html#section-5.4 | UUIDv4}.
  *
- * ```js
- * import { version } from "./mod.ts"
+ * @example Usage
+ * ```ts
+ * import { v4 } from "@std/uuid";
+ * import { assert } from "@std/assert";
  *
- * version("d9428888-122b-11e1-b85c-61cd3cbb3210") // 1
- * version("109156be-c4fb-41ea-b1b4-efe1671c5836") // 4
+ * const uuid = crypto.randomUUID();
+ * assert(v4.validate(uuid));
  * ```
  */
-export function version(uuid: string): number {
-  if (!validate(uuid)) {
-    throw TypeError("Invalid UUID");
-  }
+export const v4 = {
+  validate: validateV4,
+};
 
-  return parseInt(uuid[14], 16);
-}
-
-export { v1, v4, v5 };
+/**
+ * Generator and validator for
+ * {@link https://www.rfc-editor.org/rfc/rfc9562.html#section-5.5 | UUIDv5}.
+ *
+ * @example Usage
+ * ```ts
+ * import { v5, NAMESPACE_DNS } from "@std/uuid";
+ * import { assert } from "@std/assert";
+ *
+ * const data = new TextEncoder().encode("deno.land");
+ * const uuid = await v5.generate(NAMESPACE_DNS, data);
+ * assert(v5.validate(uuid));
+ * ```
+ */
+export const v5 = {
+  generate: generateV5,
+  validate: validateV5,
+};

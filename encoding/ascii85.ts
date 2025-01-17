@@ -1,47 +1,97 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
-export type Ascii85Standard = "Adobe" | "btoa" | "RFC 1924" | "Z85";
 /**
- * encoding/decoding options
- * @property standard - characterset and delimiter (if supported and used). Defaults to Adobe
- * @property delimiter - whether to use a delimiter (if supported) - "<~" and "~>" by default
+ * Utilities for working with {@link https://en.wikipedia.org/wiki/Ascii85 | ascii85} encoding.
+ *
+ * ## Specifying a standard and delimiter
+ *
+ * By default, all functions are using the most popular Adobe version of ascii85
+ * and not adding any delimiter. However, there are three more standards
+ * supported - btoa (different delimiter and additional compression of 4 bytes
+ * equal to 32), {@link https://rfc.zeromq.org/spec/32/ | Z85} and
+ * {@link https://www.rfc-editor.org/rfc/rfc1924.html | RFC 1924}. It's possible to use a
+ * different encoding by specifying it in `options` object as a second parameter.
+ *
+ * Similarly, it's possible to make `encode` add a delimiter (`<~` and `~>` for
+ * Adobe, `xbtoa Begin` and `xbtoa End` with newlines between the delimiters and
+ * encoded data for btoa. Checksums for btoa are not supported. Delimiters are not
+ * supported by other encodings.)
+ *
+ * @module
  */
-export interface Ascii85Options {
+
+import { validateBinaryLike } from "./_validate_binary_like.ts";
+
+/**
+ * Supported ascii85 standards for {@linkcode EncodeAscii85Options} and
+ * {@linkcode DecodeAscii85Options}.
+ */
+export type Ascii85Standard = "Adobe" | "btoa" | "RFC 1924" | "Z85";
+
+/** Options for {@linkcode encodeAscii85}. */
+export interface EncodeAscii85Options {
+  /**
+   * Character set and delimiter (if supported and used).
+   *
+   * @default {"Adobe"}
+   */
   standard?: Ascii85Standard;
+  /**
+   * Whether to use a delimiter (if supported).
+   *
+   * @default {false}
+   */
   delimiter?: boolean;
 }
+
 const rfc1924 =
-  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~" as const;
 const Z85 =
-  "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#";
+  "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#" as const;
+
 /**
- * Encodes a given Uint8Array into ascii85, supports multiple standards
- * @param uint8 input to encode
- * @param [options] encoding options
- * @param [options.standard=Adobe] encoding standard (Adobe, btoa, RFC 1924 or Z85)
- * @param [options.delimiter] whether to use a delimiter, if supported by encoding standard
+ * Converts data into an ascii85-encoded string.
+ *
+ * @param data The data to encode.
+ * @param options Options for encoding.
+ *
+ * @returns The ascii85-encoded string.
+ *
+ * @example Usage
+ * ```ts
+ * import { encodeAscii85 } from "@std/encoding/ascii85";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(encodeAscii85("Hello world!"), "87cURD]j7BEbo80");
+ * ```
  */
-export function encode(uint8: Uint8Array, options?: Ascii85Options): string {
-  const standard = options?.standard ?? "Adobe";
-  let output: string[] = [],
-    v: number,
-    n = 0,
-    difference = 0;
+export function encodeAscii85(
+  data: ArrayBuffer | Uint8Array | string,
+  options: EncodeAscii85Options = {},
+): string {
+  let uint8 = validateBinaryLike(data);
+
+  const { standard = "Adobe" } = options;
+
+  let output: string[] = [];
+  let v: number;
+  let n = 0;
+  let difference = 0;
   if (uint8.length % 4 !== 0) {
     const tmp = uint8;
     difference = 4 - (tmp.length % 4);
     uint8 = new Uint8Array(tmp.length + difference);
     uint8.set(tmp);
   }
-  const view = new DataView(uint8.buffer);
-  for (let i = 0, len = uint8.length; i < len; i += 4) {
+  const view = new DataView(uint8.buffer, uint8.byteOffset, uint8.byteLength);
+  for (let i = 0; i < uint8.length; i += 4) {
     v = view.getUint32(i);
     // Adobe and btoa standards compress 4 zeroes to single "z" character
     if (
       (standard === "Adobe" || standard === "btoa") &&
       v === 0 &&
-      i < len - difference - 3
+      i < uint8.length - difference - 3
     ) {
       output[n++] = "z";
       continue;
@@ -73,24 +123,44 @@ export function encode(uint8: Uint8Array, options?: Ascii85Options): string {
       }
       break;
     case "RFC 1924":
-      output = output.map((val) => rfc1924[val.charCodeAt(0) - 33]);
+      output = output.map((val) => rfc1924[val.charCodeAt(0) - 33]!);
       break;
     case "Z85":
-      output = output.map((val) => Z85[val.charCodeAt(0) - 33]);
+      output = output.map((val) => Z85[val.charCodeAt(0) - 33]!);
       break;
   }
   return output.slice(0, output.length - difference).join("");
 }
+
+/** Options for {@linkcode decodeAscii85}. */
+export type DecodeAscii85Options = Omit<EncodeAscii85Options, "delimiter">;
+
 /**
- * Decodes a given ascii85 encoded string.
- * @param ascii85 input to decode
- * @param [options] decoding options
- * @param [options.standard=Adobe] encoding standard used in the input string (Adobe, btoa, RFC 1924 or Z85)
+ * Decodes a ascii85-encoded string.
+ *
+ * @param ascii85 The ascii85-encoded string to decode.
+ * @param options Options for decoding.
+ * @returns The decoded data.
+ *
+ * @example Usage
+ * ```ts
+ * import { decodeAscii85 } from "@std/encoding/ascii85";
+ * import { assertEquals } from "@std/assert";
+ *
+ * assertEquals(
+ *   decodeAscii85("87cURD]j7BEbo80"),
+ *   new TextEncoder().encode("Hello world!"),
+ * );
+ * ```
  */
-export function decode(ascii85: string, options?: Ascii85Options): Uint8Array {
-  const encoding = options?.standard ?? "Adobe";
+export function decodeAscii85(
+  ascii85: string,
+  options: DecodeAscii85Options = {},
+): Uint8Array {
+  const { standard = "Adobe" } = options;
+
   // translate all encodings to most basic adobe/btoa one and decompress some special characters ("z" and "y")
-  switch (encoding) {
+  switch (standard) {
     case "Adobe":
       ascii85 = ascii85.replaceAll(/(<~|~>)/g, "").replaceAll("z", "!!!!!");
       break;
@@ -113,14 +183,14 @@ export function decode(ascii85: string, options?: Ascii85Options): Uint8Array {
       );
       break;
   }
-  //remove all invalid characters
+  // remove all invalid characters
   ascii85 = ascii85.replaceAll(/[^!-u]/g, "");
-  const len = ascii85.length,
-    output = new Uint8Array(len + 4 - (len % 4));
+  const len = ascii85.length;
+  const output = new Uint8Array(len + 4 - (len % 4));
   const view = new DataView(output.buffer);
-  let v = 0,
-    n = 0,
-    max = 0;
+  let v = 0;
+  let n = 0;
+  let max = 0;
   for (let i = 0; i < len;) {
     for (max += 5; i < max; i++) {
       v = v * 85 + (i < len ? ascii85.charCodeAt(i) : 117) - 33;

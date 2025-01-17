@@ -1,40 +1,51 @@
-// Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+// Copyright 2018-2025 the Deno authors. MIT license.
 // This module is browser compatible.
 
 /**
- * Returns a new record with all entries of the given record except the ones that have a key that does not match the given predicate
+ * Returns a new record with all entries of the given record except the ones that
+ * have a key that does not match the given predicate.
  *
- * Example:
+ * @typeParam T The type of the values in the input record.
  *
+ * @param record The record to filter keys from.
+ * @param predicate The function to test each key for a condition.
+ *
+ * @returns A new record with all entries that have a key that matches the given
+ * predicate.
+ *
+ * @example Basic usage
  * ```ts
- * import { filterKeys } from "https://deno.land/std@$STD_VERSION/collections/mod.ts";
- * import { assertEquals } from "https://deno.land/std@$STD_VERSION/testing/asserts.ts";
+ * import { filterKeys } from "@std/collections/filter-keys";
+ * import { assertEquals } from "@std/assert";
  *
  * const menu = {
- *     'Salad': 11,
- *     'Soup': 8,
- *     'Pasta': 13,
- * }
- * const menuWithoutSalad = filterKeys(menu, it => it !== 'Salad')
+ *   Salad: 11,
+ *   Soup: 8,
+ *   Pasta: 13,
+ * };
  *
- * assertEquals(menuWithoutSalad, {
- *     'Soup': 8,
- *     'Pasta': 13,
- * })
+ * const menuWithoutSalad = filterKeys(menu, (item) => item !== "Salad");
+ *
+ * assertEquals(
+ *   menuWithoutSalad,
+ *   {
+ *     Soup: 8,
+ *     Pasta: 13,
+ *   },
+ * );
  * ```
  */
 export function filterKeys<T>(
   record: Readonly<Record<string, T>>,
   predicate: (key: string) => boolean,
 ): Record<string, T> {
-  const ret: Record<string, T> = {};
-  const keys = Object.keys(record);
+  const result: Record<string, T> = {};
 
-  for (const key of keys) {
+  for (const [key, value] of Object.entries(record)) {
     if (predicate(key)) {
-      ret[key] = record[key];
+      result[key] = value;
     }
   }
 
-  return ret;
+  return result;
 }
